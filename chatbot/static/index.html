@@ -1,0 +1,2231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureChat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0a0a;
+    --surface:   #111111;
+    --surface2:  #181818;
+    --surface3:  #202020;
+    --border:    #252525;
+    --border2:   #2e2e2e;
+    --text:      #e8e8e8;
+    --muted:     #555555;
+    --accent:    #3b82f6;
+    --accent2:   #1d4ed8;
+    --safe:      #22c55e;
+    --suspicious:#eab308;
+    --highrisk:  #f97316;
+    --blocked:   #ef4444;
+    --mono:      'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    --sans:      'Syne', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --chat-font: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "header header"
+      "chat   panel";
+  }
+
+  /* ── Header ── */
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .shield-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .shield-icon svg { width: 18px; height: 18px; fill: #fff; }
+
+  .brand {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .header-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border2);
+    margin: 0 10px;
+    flex-shrink: 0;
+  }
+
+  .header-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .header-btn:hover { color: var(--text); border-color: var(--border2); }
+
+  .header-btn svg {
+    width: 14px; height: 14px;
+    stroke: currentColor; fill: none; stroke-width: 2;
+  }
+
+  .request-counter {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .blocked-badge {
+    display: none;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--blocked);
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 10px;
+    animation: badgeBounce 0.4s ease;
+  }
+
+  .blocked-badge.visible { display: inline-block; }
+
+  @keyframes badgeBounce {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.35); }
+    70%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+  }
+
+  .threat-pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--safe);
+    letter-spacing: 0.05em;
+    transition: color 0.15s, border-color 0.15s;
+    color: var(--safe);
+  }
+
+  #mismatch-alert {
+    display: none;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--blocked);
+    color: var(--blocked);
+    animation: mismatchPulse 1.5s ease infinite;
+  }
+
+  #mismatch-alert.visible { display: inline-flex; }
+
+  @keyframes mismatchPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .status-dot.online {
+    background: var(--safe);
+    animation: pulse 2s infinite;
+  }
+
+  .status-dot.offline { background: var(--blocked); }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+    50%      { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  }
+
+  /* ── Chat column ── */
+  #chat-column {
+    grid-area: chat;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .messages-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .messages-fade-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: linear-gradient(to bottom, var(--bg), transparent);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .messages-fade-bottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 48px;
+    background: linear-gradient(to top, var(--bg), transparent);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  #messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+    background-color: var(--bg);
+    background-image: radial-gradient(circle, #222222 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  #empty-hint {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    opacity: 0.35;
+    z-index: 2;
+  }
+
+  .empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+  .empty-title {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .empty-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .input-fade {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 32px;
+    background: linear-gradient(to top, var(--surface), transparent);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .auto-scroll-btn {
+    position: absolute;
+    bottom: 8px; right: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    z-index: 5;
+  }
+
+  .auto-scroll-btn.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .msg-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 78%;
+    animation: fadeUp 0.2s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .msg-group.user { align-self: flex-end; align-items: flex-end; }
+  .msg-group.assistant,
+  .msg-group.system { align-self: flex-start; align-items: flex-start; }
+
+  .msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 0 2px;
+    margin-bottom: 4px;
+  }
+
+  .msg-group.user .msg-meta { flex-direction: row-reverse; }
+
+  .msg-sender { flex-shrink: 0; }
+
+  .verdict-tag {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: lowercase;
+  }
+
+  .verdict-tag.safe       { background: rgba(34,197,94,0.15);  color: var(--safe); }
+  .verdict-tag.suspicious { background: rgba(234,179,8,0.15);  color: var(--suspicious); }
+  .verdict-tag.high_risk  { background: rgba(249,115,22,0.15); color: var(--highrisk); }
+  .verdict-tag.blocked    { background: rgba(239,68,68,0.15);  color: var(--blocked); }
+
+  .msg-time { margin-left: auto; flex-shrink: 0; }
+  .msg-group.user .msg-time { margin-left: 0; margin-right: auto; }
+
+  .msg-wrap {
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .bubble {
+    position: relative;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-family: var(--chat-font);
+    font-size: 14px;
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  .msg-group.user .bubble {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 3px;
+    white-space: pre-wrap;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+
+  .msg-group.assistant .bubble {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-top-color: var(--border2);
+    border-bottom-left-radius: 3px;
+  }
+
+  .msg-group.system .bubble {
+    background: #1a0a0a;
+    color: var(--blocked);
+    border: 1px solid #3b1515;
+    border-bottom-left-radius: 3px;
+    font-family: var(--mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 6px; right: 8px;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+    font-family: var(--mono);
+    line-height: 1.2;
+  }
+
+  .msg-wrap:hover .copy-btn { opacity: 1; pointer-events: auto; }
+
+  .inline-code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #93c5fd;
+  }
+
+  .bubble ul, .bubble ol { margin: 4px 0 4px 18px; padding: 0; }
+  .bubble li { margin: 2px 0; }
+
+  .retry-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .retry-btn:hover { color: var(--text); border-color: var(--border2); }
+
+  .suspicion-warning {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--suspicious);
+    background: #1c1407;
+    border: 1px solid #3d2e0a;
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-top: 4px;
+    animation: rise 0.2s ease;
+  }
+
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-top-color: var(--border2);
+    border-radius: 14px;
+    border-bottom-left-radius: 3px;
+    width: fit-content;
+    font-family: var(--chat-font);
+  }
+
+  .typing-indicator span {
+    width: 6px; height: 6px;
+    background: var(--muted);
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+  }
+
+  .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30%            { transform: translateY(-5px); }
+  }
+
+  /* ── Input area ── */
+  #input-area {
+    flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 10px 14px 12px;
+    position: relative;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  #message-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--chat-font);
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 9px 12px;
+    resize: none;
+    min-height: 40px;
+    max-height: 100px;
+    overflow-y: auto;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  #message-input:focus {
+    border-color: var(--border2);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+
+  #message-input::placeholder { color: var(--muted); }
+  #message-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #send-btn {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.15s;
+  }
+
+  #send-btn:hover:not(:disabled)  { background: var(--accent2); }
+  #send-btn:active:not(:disabled) { transform: scale(0.95); }
+  #send-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+  .send-arrow { display: flex; align-items: center; justify-content: center; }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: none;
+  }
+
+  #send-btn.loading .send-arrow { display: none; }
+  #send-btn.loading .spinner    { display: block; }
+
+  .input-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  .input-hints {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    min-height: 14px;
+  }
+
+  .input-hint { color: var(--muted); }
+
+  #char-count { display: none; color: var(--muted); }
+  #char-count.visible { display: inline; }
+  #char-count.warn { color: var(--suspicious); }
+  #char-count.danger { color: var(--blocked); }
+
+  #clear-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: color 0.15s;
+  }
+
+  #clear-btn:hover { color: var(--blocked); }
+
+  /* ── Right panel ── */
+  #side-panel {
+    grid-area: panel;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .panel-section {
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #log-section {
+    border-bottom: none;
+    flex: 1;
+    min-height: 400px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 14px 12px;
+  }
+
+  .panel-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  #last-checked-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .last-request {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .gauge-wrap {
+    position: relative;
+    width: 64px; height: 64px;
+    flex-shrink: 0;
+  }
+
+  .gauge-wrap svg {
+    width: 64px; height: 64px;
+    transform: rotate(-90deg);
+  }
+
+  .gauge-track {
+    fill: none;
+    stroke: var(--surface3);
+    stroke-width: 6;
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 163;
+    stroke-dashoffset: 163;
+    transition: stroke-dashoffset 0.6s ease, stroke 0.15s ease;
+    will-change: transform;
+  }
+
+  .gauge-fill.no-transition { transition: none !important; }
+
+  .gauge-score {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .last-info { min-width: 0; flex: 1; }
+
+  .last-verdict {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 16px;
+    text-transform: capitalize;
+    margin-bottom: 2px;
+  }
+
+  .last-verdict.awaiting { color: var(--muted); text-transform: none; font-size: 13px; }
+
+  .last-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .prob-bar-wrap {
+    height: 3px;
+    background: var(--surface3);
+    border-radius: 2px;
+    margin: 5px 0 3px;
+    overflow: hidden;
+  }
+
+  .prob-bar {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.6s ease, background 0.15s;
+    will-change: transform;
+  }
+
+  .gauge-prob {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 10px 6px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-num.safe       { color: var(--safe); }
+  .stat-num.suspicious { color: var(--suspicious); }
+  .stat-num.high_risk  { color: var(--highrisk); }
+  .stat-num.blocked    { color: var(--blocked); }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .sparkline { display: block; margin: 0 auto; }
+
+  .spark-dot {
+    opacity: 0;
+    animation: sparkIn 0.2s ease forwards;
+  }
+
+  @keyframes sparkIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .avg-peak {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .bar-chart-wrap {
+    position: relative;
+    height: 36px;
+  }
+
+  .bar-chart-wrap::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: var(--border2);
+    pointer-events: none;
+  }
+
+  .bar-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 36px;
+    width: 100%;
+    padding-bottom: 1px;
+  }
+
+  .bar {
+    flex: 1 1 0;
+    min-width: 2px;
+    border-radius: 2px 2px 0 0;
+    transition: height 0.2s ease;
+    cursor: crosshair;
+    will-change: transform;
+  }
+
+  .bar.safe       { background: var(--safe); }
+  .bar.suspicious { background: var(--suspicious); }
+  .bar.high_risk  { background: var(--highrisk); }
+  .bar.blocked    { background: var(--blocked); }
+
+  #chart-tooltip {
+    position: fixed;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    white-space: nowrap;
+    line-height: 1.6;
+  }
+
+  #chart-tooltip.visible { opacity: 1; }
+
+  .pattern-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .pattern-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--surface3);
+    color: var(--highrisk);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 7px;
+  }
+
+  .pattern-none {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  #detection-log {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #log-filters {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .lf-btn {
+    font-family: var(--mono);
+    font-size: 9px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 3px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .lf-btn.active[data-filter="all"]        { border-color: var(--accent); color: var(--accent); }
+  .lf-btn.active[data-filter="safe"]       { border-color: var(--safe); color: var(--safe); }
+  .lf-btn.active[data-filter="suspicious"] { border-color: var(--suspicious); color: var(--suspicious); }
+  .lf-btn.active[data-filter="high_risk"]  { border-color: var(--highrisk); color: var(--highrisk); }
+  .lf-btn.active[data-filter="blocked"]    { border-color: var(--blocked); color: var(--blocked); }
+
+  #log-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  #log-list::-webkit-scrollbar { width: 3px; }
+  #log-list::-webkit-scrollbar-track { background: transparent; }
+  #log-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .log-entry {
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.2s ease;
+  }
+
+  .log-entry:last-child { border-bottom: none; }
+
+  .log-row {
+    display: grid;
+    grid-template-columns: 32px 58px minmax(0, 1fr) auto 36px 12px;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .log-row:hover { background: var(--surface3); }
+
+  .log-score { font-weight: 600; text-align: right; }
+
+  .log-badge {
+    font-size: 8px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 8px;
+    text-transform: lowercase;
+    justify-self: start;
+  }
+
+  .log-badge.safe       { background: rgba(34,197,94,0.15);  color: var(--safe); }
+  .log-badge.suspicious { background: rgba(234,179,8,0.15);  color: var(--suspicious); }
+  .log-badge.high_risk  { background: rgba(249,115,22,0.15); color: var(--highrisk); }
+  .log-badge.blocked    { background: rgba(239,68,68,0.15);  color: var(--blocked); }
+
+  .log-text {
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .log-cat-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    justify-content: flex-end;
+    max-width: 120px;
+  }
+
+  .log-cat-pill {
+    font-size: 7px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid;
+    white-space: nowrap;
+    text-transform: lowercase;
+  }
+
+  .log-time {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .log-chevron {
+    font-size: 10px;
+    color: var(--muted);
+    transition: transform 0.3s ease;
+    text-align: center;
+  }
+
+  .log-entry.expanded .log-chevron { transform: rotate(90deg); }
+
+  .log-expand-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-top: none;
+    border-left: 3px solid var(--border2);
+    border-radius: 0 0 6px 6px;
+    padding: 0 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .log-entry.expanded .log-expand-detail {
+    max-height: 500px;
+    padding: 12px 14px;
+    overflow-y: auto;
+  }
+
+  .log-entry.expanded[data-verdict="safe"] .log-expand-detail       { border-left-color: var(--safe); }
+  .log-entry.expanded[data-verdict="suspicious"] .log-expand-detail { border-left-color: var(--suspicious); }
+  .log-entry.expanded[data-verdict="high_risk"] .log-expand-detail  { border-left-color: var(--highrisk); }
+  .log-entry.expanded[data-verdict="blocked"] .log-expand-detail    { border-left-color: var(--blocked); }
+
+  .log-detail-msg {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 10px;
+  }
+
+  .log-section-hdr {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 6px;
+    margin-top: 10px;
+  }
+
+  .log-section-hdr:first-child { margin-top: 0; }
+
+  .log-cat-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .log-cat-card {
+    display: inline-flex;
+    flex-direction: column;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 6px 10px;
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  .log-cat-card-name {
+    font-weight: 600;
+    color: var(--text);
+    text-transform: lowercase;
+  }
+
+  .log-cat-card-meta { color: var(--muted); font-size: 9px; }
+
+  .log-pattern-line {
+    color: var(--highrisk);
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.8;
+    padding-left: 8px;
+  }
+
+  .log-score-grid {
+    display: grid;
+    grid-template-columns: 160px 40px;
+    row-gap: 3px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  .log-score-total {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    border-top: 1px solid var(--border2);
+    padding-top: 4px;
+    margin-top: 4px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .log-none { color: var(--muted); font-size: 10px; }
+
+  .log-empty {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 4px 0;
+  }
+
+  .c-safe       { color: var(--safe); }
+  .c-suspicious { color: var(--suspicious); }
+  .c-high_risk  { color: var(--highrisk); }
+  .c-blocked    { color: var(--blocked); }
+
+  @media (max-width: 900px) {
+    body {
+      grid-template-columns: 1fr;
+      grid-template-rows: 52px 1fr 50vh;
+      grid-template-areas: "header" "chat" "panel";
+      overflow: hidden;
+    }
+    #chat-column {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      min-height: 0;
+    }
+    #side-panel {
+      min-height: 0;
+      overflow: hidden;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="shield-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v5.7c0 4.67-3.13 9.03-7 10.25C8.13 21.03 5 16.67 5 11v-5.7l7-3.12z"/></svg>
+    </div>
+    <span class="brand">SecureChat</span>
+  </div>
+  <div class="header-right">
+    <button class="header-btn" id="export-btn" title="Export conversation" aria-label="Export conversation">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <span class="header-sep"></span>
+    <span class="request-counter" id="request-counter">0 requests</span>
+    <span class="header-sep"></span>
+    <span class="blocked-badge" id="blocked-badge">0 blocked</span>
+    <span class="header-sep blocked-sep" style="display:none"></span>
+    <div id="threat-level" class="threat-pill">
+      <span id="threat-label">LOW</span>
+    </div>
+    <span class="header-sep"></span>
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Checking...</span>
+    </div>
+    <span class="header-sep" id="mismatch-sep" style="display:none"></span>
+    <div id="mismatch-alert" title="Detector scored low but assistant refused the request">DETECTOR/RESPONSE MISMATCH</div>
+  </div>
+</header>
+
+<div id="chat-column">
+  <div class="messages-wrap">
+    <div class="messages-fade-top"></div>
+    <div id="empty-hint">
+      <div class="empty-title">Start a conversation</div>
+      <div class="empty-sub">Ask me anything</div>
+    </div>
+    <div id="messages"></div>
+    <div class="messages-fade-bottom"></div>
+    <button class="auto-scroll-btn active" id="auto-scroll-btn">↓ auto-scroll</button>
+  </div>
+  <div class="input-fade"></div>
+  <div id="input-area">
+    <div class="input-row">
+      <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+      <button id="send-btn" aria-label="Send">
+        <span class="send-arrow">&#10148;</span>
+        <span class="spinner"></span>
+      </button>
+    </div>
+    <div class="input-footer">
+      <div class="input-hints" id="input-hints">
+        <span class="input-hint" id="input-hint-text">Enter to send · Shift+Enter for newline</span>
+        <span id="char-count"></span>
+      </div>
+      <button id="clear-btn">clear chat</button>
+    </div>
+  </div>
+</div>
+
+<aside id="side-panel">
+  <div class="panel-section">
+    <div class="panel-title-row">
+      <div class="panel-title">Last request</div>
+      <div id="last-checked-time"></div>
+    </div>
+    <div class="last-request">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 64 64">
+          <circle class="gauge-track" cx="32" cy="32" r="26"/>
+          <circle class="gauge-fill" id="gauge-fill" cx="32" cy="32" r="26"/>
+        </svg>
+        <div class="gauge-score c-safe" id="gauge-score">—</div>
+      </div>
+      <div class="last-info">
+        <div class="last-verdict awaiting" id="last-verdict">Awaiting first request</div>
+        <div class="last-label">risk score / 100</div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar" id="prob-bar"></div>
+        </div>
+        <div class="gauge-prob" id="gauge-prob">ML prob: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-title">Session stats</div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num safe" id="stat-safe">0</div>
+        <div class="stat-label">safe</div>
+        <svg class="sparkline" id="spark-safe" width="60" height="16" viewBox="0 0 60 16"></svg>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num suspicious" id="stat-suspicious">0</div>
+        <div class="stat-label">suspicious</div>
+        <svg class="sparkline" id="spark-suspicious" width="60" height="16" viewBox="0 0 60 16"></svg>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num high_risk" id="stat-high-risk">0</div>
+        <div class="stat-label">high risk</div>
+        <svg class="sparkline" id="spark-high-risk" width="60" height="16" viewBox="0 0 60 16"></svg>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num blocked" id="stat-blocked">0</div>
+        <div class="stat-label">blocked</div>
+        <svg class="sparkline" id="spark-blocked" width="60" height="16" viewBox="0 0 60 16"></svg>
+      </div>
+    </div>
+    <div class="avg-peak" id="avg-peak">avg score: — · peak: —</div>
+    <div class="bar-chart-wrap">
+      <div class="bar-chart" id="bar-chart"></div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-title">Matched patterns</div>
+    <div class="pattern-list" id="pattern-list">
+      <span class="pattern-none">none</span>
+    </div>
+  </div>
+
+  <div class="panel-section" id="log-section">
+    <div class="panel-title">Detection log</div>
+    <div id="detection-log">
+      <div id="log-filters">
+        <button class="lf-btn active" data-filter="all">All</button>
+        <button class="lf-btn" data-filter="safe">Safe</button>
+        <button class="lf-btn" data-filter="suspicious">Suspicious</button>
+        <button class="lf-btn" data-filter="high_risk">High Risk</button>
+        <button class="lf-btn" data-filter="blocked">Blocked</button>
+      </div>
+      <div id="log-list">
+        <div class="log-empty">No detections yet</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div id="chart-tooltip"></div>
+
+<script>
+  const GAUGE_CIRC = 163;
+
+  const messagesEl      = document.getElementById('messages');
+  const emptyHint       = document.getElementById('empty-hint');
+  const input           = document.getElementById('message-input');
+  const sendBtn         = document.getElementById('send-btn');
+  const clearBtn        = document.getElementById('clear-btn');
+  const exportBtn       = document.getElementById('export-btn');
+  const statusDot       = document.getElementById('status-dot');
+  const statusText      = document.getElementById('status-text');
+  const requestCounter  = document.getElementById('request-counter');
+  const blockedBadge    = document.getElementById('blocked-badge');
+  const blockedSep      = document.querySelector('.blocked-sep');
+  const charCount       = document.getElementById('char-count');
+  const inputHintText   = document.getElementById('input-hint-text');
+  const autoScrollBtn   = document.getElementById('auto-scroll-btn');
+  const gaugeFill       = document.getElementById('gauge-fill');
+  const gaugeScore      = document.getElementById('gauge-score');
+  const lastVerdict     = document.getElementById('last-verdict');
+  const lastCheckedTime = document.getElementById('last-checked-time');
+  const probBar         = document.getElementById('prob-bar');
+  const gaugeProb       = document.getElementById('gauge-prob');
+  const statSafe        = document.getElementById('stat-safe');
+  const statSuspicious  = document.getElementById('stat-suspicious');
+  const statHighRisk    = document.getElementById('stat-high-risk');
+  const statBlocked     = document.getElementById('stat-blocked');
+  const avgPeak         = document.getElementById('avg-peak');
+  const barChart        = document.getElementById('bar-chart');
+  const chartTooltip    = document.getElementById('chart-tooltip');
+  const patternList     = document.getElementById('pattern-list');
+  const logList         = document.getElementById('log-list');
+  const logFilters      = document.getElementById('log-filters');
+  const threatLevel     = document.getElementById('threat-level');
+  const threatLabel     = document.getElementById('threat-label');
+  const mismatchAlert   = document.getElementById('mismatch-alert');
+  const mismatchSep     = document.getElementById('mismatch-sep');
+
+  const sparkSvgs = {
+    safe:       document.getElementById('spark-safe'),
+    suspicious: document.getElementById('spark-suspicious'),
+    high_risk:  document.getElementById('spark-high-risk'),
+    blocked:    document.getElementById('spark-blocked'),
+  };
+
+  let autoScroll = true;
+  let inFlight = false;
+  let hasRequests = false;
+  let userHasSent = false;
+  let prevBlockedCount = 0;
+  let blockedRequestCount = 0;
+  let scoreHistory = [];
+  let logEntries = [];
+  let expandedLogEntry = null;
+
+  const CATEGORY_BASE_SCORES = {
+    prompt_injection: 40,
+    jailbreak: 45,
+    data_exfiltration: 50,
+    social_engineering: 35,
+    harmful_content: 55,
+    system_abuse: 40,
+    identity_manipulation: 35,
+    obfuscation_evasion: 45,
+    malicious_code: 60,
+    privacy_violation: 50,
+    radicalization: 60,
+    misinformation: 30,
+  };
+  let logFilter = 'all';
+  let exportLog = [];
+  let rollingScores = [];
+  let sparklineData = { safe: [], suspicious: [], high_risk: [], blocked: [] };
+
+  const VERDICT_COLORS = {
+    safe:       'var(--safe)',
+    suspicious: 'var(--suspicious)',
+    high_risk:  'var(--highrisk)',
+    blocked:    'var(--blocked)',
+  };
+
+  const VERDICT_HEX = {
+    safe:       '#22c55e',
+    suspicious: '#eab308',
+    high_risk:  '#f97316',
+    blocked:    '#ef4444',
+  };
+
+  function verdictClass(v) {
+    return ['safe','suspicious','high_risk','blocked'].includes(v) ? v : 'safe';
+  }
+
+  function truncateLogText(text) {
+    if (text.length <= 40) return text;
+    return text.slice(0, 40) + '…';
+  }
+
+  function getCategoryPillStyle(baseScore) {
+    if (baseScore < 40) return { border: '#2a3a2a', color: '#4ade80' };
+    if (baseScore < 50) return { border: '#3a3a1a', color: '#facc15' };
+    if (baseScore < 60) return { border: '#3a2a1a', color: '#fb923c' };
+    return { border: '#3a1a1a', color: '#f87171' };
+  }
+
+  function formatCategoryLabel(name) {
+    return name.replace(/_/g, ' ');
+  }
+
+  function buildExpandedDetail(entry) {
+    const wrap = document.createElement('div');
+
+    const msg = document.createElement('div');
+    msg.className = 'log-detail-msg';
+    msg.textContent = entry.text;
+    wrap.appendChild(msg);
+
+    const catHdr = document.createElement('div');
+    catHdr.className = 'log-section-hdr';
+    catHdr.textContent = 'Threat Categories Detected';
+    wrap.appendChild(catHdr);
+
+    const catCards = document.createElement('div');
+    catCards.className = 'log-cat-cards';
+    const details = entry.category_details || {};
+    const cats = Object.keys(details);
+    if (!cats.length) {
+      const none = document.createElement('div');
+      none.className = 'log-none';
+      none.textContent = 'none';
+      catCards.appendChild(none);
+    } else {
+      cats.forEach((cat) => {
+        const info = details[cat] || {};
+        const card = document.createElement('div');
+        card.className = 'log-cat-card';
+        const name = document.createElement('div');
+        name.className = 'log-cat-card-name';
+        name.textContent = formatCategoryLabel(cat);
+        const score = document.createElement('div');
+        score.className = 'log-cat-card-meta';
+        score.textContent = 'base score: ' + (info.base_score ?? CATEGORY_BASE_SCORES[cat] ?? 0);
+        const patterns = document.createElement('div');
+        patterns.className = 'log-cat-card-meta';
+        patterns.textContent = 'patterns: ' + ((info.patterns_matched || []).length);
+        card.appendChild(name);
+        card.appendChild(score);
+        card.appendChild(patterns);
+        catCards.appendChild(card);
+      });
+    }
+    wrap.appendChild(catCards);
+
+    const patHdr = document.createElement('div');
+    patHdr.className = 'log-section-hdr';
+    patHdr.textContent = 'Matched Patterns';
+    wrap.appendChild(patHdr);
+
+    const patterns = entry.matched_patterns || [];
+    if (!patterns.length) {
+      const none = document.createElement('div');
+      none.className = 'log-none';
+      none.textContent = 'none';
+      wrap.appendChild(none);
+    } else {
+      patterns.forEach((p) => {
+        const line = document.createElement('div');
+        line.className = 'log-pattern-line';
+        line.textContent = '• ' + p;
+        wrap.appendChild(line);
+      });
+    }
+
+    const scoreHdr = document.createElement('div');
+    scoreHdr.className = 'log-section-hdr';
+    scoreHdr.textContent = 'Scoring Breakdown';
+    wrap.appendChild(scoreHdr);
+
+    const grid = document.createElement('div');
+    grid.className = 'log-score-grid';
+    const breakdown = entry.scoring_breakdown || {};
+    const rows = [
+      ['ML component:', breakdown.ml_component ?? 0],
+      ['Category score:', breakdown.category_component ?? 0],
+      ['Pattern bonus:', breakdown.pattern_bonus ?? 0],
+      ['Multi-category:', breakdown.multi_category_bonus ?? 0],
+    ];
+    rows.forEach(([label, val]) => {
+      const l = document.createElement('span');
+      l.textContent = label;
+      const v = document.createElement('span');
+      v.textContent = val;
+      grid.appendChild(l);
+      grid.appendChild(v);
+    });
+    const totalRow = document.createElement('div');
+    totalRow.className = 'log-score-total';
+    const totalLabel = document.createElement('span');
+    totalLabel.textContent = 'Total:';
+    const totalVal = document.createElement('span');
+    totalVal.textContent = entry.score + '  ' + entry.verdict.replace('_', ' ').toUpperCase();
+    totalRow.appendChild(totalLabel);
+    totalRow.appendChild(totalVal);
+    grid.appendChild(totalRow);
+    wrap.appendChild(grid);
+
+    return wrap;
+  }
+
+  function formatTime(isoOrDate) {
+    const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatExportTime(iso) {
+    return new Date(iso).toISOString().replace('T', ' ').slice(0, 19);
+  }
+
+  function scrollBottom() {
+    if (autoScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function setInputDisabled(val) {
+    inFlight = val;
+    input.disabled = val;
+    sendBtn.disabled = val;
+    sendBtn.classList.toggle('loading', val);
+  }
+
+  function hideEmptyHint() {
+    if (!userHasSent) {
+      userHasSent = true;
+      emptyHint.style.display = 'none';
+    }
+  }
+
+  function applyVerdictColor(el, verdict) {
+    el.className = el.className.replace(/\bc-\w+/g, '').replace(/\bawaiting\b/g, '').trim();
+    el.classList.add('c-' + verdictClass(verdict));
+  }
+
+  function sanitizeHtml(text) {
+    return text
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+      .replace(/<object[\s\S]*?<\/object>/gi, '');
+  }
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function parseMarkdown(text) {
+    const lines = sanitizeHtml(text).split('\n');
+    const out = [];
+    let i = 0;
+
+    function inlineFmt(s) {
+      s = escapeHtml(s);
+      s = s.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+      return s;
+    }
+
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^\d+\.\s/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+          items.push('<li>' + inlineFmt(lines[i].replace(/^\d+\.\s/, '')) + '</li>');
+          i++;
+        }
+        out.push('<ol>' + items.join('') + '</ol>');
+        continue;
+      }
+      if (/^[-•]\s/.test(line)) {
+        const items = [];
+        while (i < lines.length && /^[-•]\s/.test(lines[i])) {
+          items.push('<li>' + inlineFmt(lines[i].replace(/^[-•]\s/, '')) + '</li>');
+          i++;
+        }
+        out.push('<ul>' + items.join('') + '</ul>');
+        continue;
+      }
+      if (line.trim() === '') out.push('<br><br>');
+      else out.push(inlineFmt(line) + '<br>');
+      i++;
+    }
+
+    let html = out.join('');
+    html = html.replace(/(<br>){2,}/g, '<br><br>').replace(/<br>$/,'');
+    return html;
+  }
+
+  function attachCopyBtn(bubble, plainText) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = '⧉';
+    copyBtn.title = 'Copy';
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(plainText).then(() => {
+        copyBtn.textContent = '✓';
+        setTimeout(() => { copyBtn.textContent = '⧉'; }, 1500);
+      });
+    });
+    bubble.appendChild(copyBtn);
+  }
+
+  function addMessage(role, text, opts = {}) {
+    const { verdict, timestamp, blockedText, riskScore } = opts;
+    const ts = timestamp ? formatTime(timestamp) : formatTime(new Date());
+    const iso = timestamp || new Date().toISOString();
+
+    const group = document.createElement('div');
+    group.className = 'msg-group ' + role;
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+
+    const sender = document.createElement('span');
+    sender.className = 'msg-sender';
+    sender.textContent = role === 'user' ? 'You' : role === 'system' ? 'System' : 'Claude';
+    meta.appendChild(sender);
+
+    if (role === 'assistant' && verdict) {
+      const tag = document.createElement('span');
+      tag.className = 'verdict-tag ' + verdictClass(verdict);
+      tag.textContent = verdict.replace('_', ' ') + ' · ' + (riskScore ?? '');
+      meta.appendChild(tag);
+    }
+
+    const time = document.createElement('span');
+    time.className = 'msg-time';
+    time.textContent = ts;
+    meta.appendChild(time);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap';
+    if (role === 'system' && blockedText) wrap.dataset.text = blockedText;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    if (role === 'assistant') bubble.innerHTML = parseMarkdown(text);
+    else bubble.textContent = text;
+
+    attachCopyBtn(bubble, text);
+    wrap.appendChild(bubble);
+
+    if (role === 'assistant' && verdict === 'suspicious') {
+      const warn = document.createElement('div');
+      warn.className = 'suspicion-warning';
+      warn.textContent = '⚠ Flagged as suspicious (score: ' + (riskScore ?? '') + ') — treat response with caution';
+      wrap.appendChild(warn);
+    }
+
+    if (role === 'system' && blockedText) {
+      const retry = document.createElement('button');
+      retry.className = 'retry-btn';
+      retry.textContent = '↩ edit & retry';
+      retry.addEventListener('click', (e) => {
+        e.stopPropagation();
+        input.value = blockedText;
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+      });
+      wrap.appendChild(retry);
+    }
+
+    group.appendChild(meta);
+    group.appendChild(wrap);
+    messagesEl.appendChild(group);
+    scrollBottom();
+
+    if (role === 'user') exportLog.push({ type: opts.exportType || 'user', text, timestamp: iso });
+    else if (role === 'assistant') exportLog.push({ type: 'assistant', text, timestamp: iso });
+    else if (role === 'system') exportLog.push({ type: 'system', text, timestamp: iso });
+
+    return group;
+  }
+
+  function showTyping() {
+    const group = document.createElement('div');
+    group.className = 'msg-group assistant';
+    group.id = 'typing';
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    const sender = document.createElement('span');
+    sender.className = 'msg-sender';
+    sender.textContent = 'Claude';
+    meta.appendChild(sender);
+    group.appendChild(meta);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-wrap';
+    const indicator = document.createElement('div');
+    indicator.className = 'typing-indicator';
+    indicator.innerHTML = '<span></span><span></span><span></span>';
+    wrap.appendChild(indicator);
+    group.appendChild(wrap);
+
+    messagesEl.appendChild(group);
+    scrollBottom();
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing');
+    if (el) el.remove();
+  }
+
+  function updateGauge(score, verdict) {
+    hasRequests = true;
+    const vc = verdictClass(verdict);
+    const hex = VERDICT_HEX[vc];
+    const css = VERDICT_COLORS[vc];
+    const offset = GAUGE_CIRC - (score / 100) * GAUGE_CIRC;
+
+    gaugeFill.classList.add('no-transition');
+    gaugeFill.style.strokeDashoffset = GAUGE_CIRC;
+    gaugeFill.style.stroke = css;
+    gaugeFill.style.filter = 'drop-shadow(0 0 6px ' + hex + ')';
+
+    setTimeout(() => {
+      gaugeFill.classList.remove('no-transition');
+      gaugeFill.style.strokeDashoffset = offset;
+    }, 50);
+
+    gaugeScore.textContent = score;
+    applyVerdictColor(gaugeScore, vc);
+    lastVerdict.textContent = verdict.replace('_', ' ');
+    lastVerdict.classList.remove('awaiting');
+    applyVerdictColor(lastVerdict, vc);
+  }
+
+  function updateMlProb(prob, verdict) {
+    const pct = Math.round(prob * 100);
+    const vc = verdictClass(verdict);
+    probBar.style.width = pct + '%';
+    probBar.style.background = VERDICT_COLORS[vc];
+    gaugeProb.textContent = 'ML prob: ' + pct + '%';
+  }
+
+  function updateLastChecked(timestamp) {
+    const t = timestamp ? formatTime(timestamp) : formatTime(new Date());
+    lastCheckedTime.textContent = 'last checked: ' + t;
+  }
+
+  function updateMismatchAlert(data) {
+    const show = Boolean(data.detector_response_mismatch || data.mismatch_alert);
+    mismatchAlert.classList.toggle('visible', show);
+    if (mismatchSep) mismatchSep.style.display = show ? '' : 'none';
+    if (show && data.mismatch_alert) {
+      mismatchAlert.textContent = data.mismatch_alert;
+    } else if (show) {
+      mismatchAlert.textContent = 'DETECTOR/RESPONSE MISMATCH';
+    }
+  }
+
+  function updateThreatLevel(score) {
+    rollingScores.push(score);
+    if (rollingScores.length > 5) rollingScores.shift();
+
+    const avg = rollingScores.reduce((a, b) => a + b, 0) / rollingScores.length;
+    let level, color;
+
+    if (avg <= 25)       { level = 'LOW';      color = VERDICT_COLORS.safe; }
+    else if (avg <= 50)  { level = 'MEDIUM';   color = VERDICT_COLORS.suspicious; }
+    else if (avg <= 75)  { level = 'HIGH';     color = VERDICT_COLORS.high_risk; }
+    else                 { level = 'CRITICAL'; color = VERDICT_COLORS.blocked; }
+
+    threatLabel.textContent = level;
+    threatLevel.style.color = color;
+    threatLevel.style.borderColor = color;
+    threatLevel.style.borderLeftColor = color;
+  }
+
+  function renderSparkline(verdict) {
+    const svg = sparkSvgs[verdict];
+    if (!svg) return;
+    const dots = sparklineData[verdict];
+    const color = VERDICT_HEX[verdict];
+
+    svg.innerHTML = '';
+    const baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    baseline.setAttribute('x1', '0');
+    baseline.setAttribute('y1', '8');
+    baseline.setAttribute('x2', '60');
+    baseline.setAttribute('y2', '8');
+    baseline.setAttribute('stroke', 'var(--border2)');
+    baseline.setAttribute('stroke-width', '1');
+    svg.appendChild(baseline);
+
+    if (!dots.length) return;
+
+    const step = dots.length > 1 ? 60 / (dots.length - 1) : 30;
+    dots.forEach((_, idx) => {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', dots.length > 1 ? idx * step : 30);
+      circle.setAttribute('cy', '8');
+      circle.setAttribute('r', '1.5');
+      circle.setAttribute('fill', color);
+      circle.setAttribute('class', 'spark-dot');
+      svg.appendChild(circle);
+    });
+  }
+
+  function updateSparklines(verdict) {
+    const vc = verdictClass(verdict);
+    sparklineData[vc].push(true);
+    if (sparklineData[vc].length > 10) sparklineData[vc].shift();
+    renderSparkline(vc);
+  }
+
+  function updateStats(stats) {
+    statSafe.textContent = stats.safe;
+    statSuspicious.textContent = stats.suspicious;
+    statHighRisk.textContent = stats.high_risk;
+    statBlocked.textContent = stats.blocked;
+
+    requestCounter.textContent = stats.total === 1
+      ? '1 request'
+      : stats.total + ' requests';
+
+    if (blockedRequestCount > 0) {
+      blockedBadge.textContent = blockedRequestCount + ' blocked';
+      blockedBadge.classList.add('visible');
+      if (blockedSep) blockedSep.style.display = '';
+      if (blockedRequestCount > prevBlockedCount) {
+        blockedBadge.style.animation = 'none';
+        void blockedBadge.offsetWidth;
+        blockedBadge.style.animation = '';
+      }
+    } else {
+      blockedBadge.classList.remove('visible');
+      if (blockedSep) blockedSep.style.display = 'none';
+    }
+    prevBlockedCount = blockedRequestCount;
+
+    const peak = scoreHistory.length
+      ? Math.max(...scoreHistory.map(s => s.score))
+      : (hasRequests ? stats.last_score : 0);
+    avgPeak.textContent = 'avg score: ' + (hasRequests ? Math.round(stats.avg_score) : '—') + ' · peak: ' + (hasRequests ? peak : '—');
+  }
+
+  function renderBarChart() {
+    barChart.innerHTML = '';
+    scoreHistory.forEach((item) => {
+      const bar = document.createElement('div');
+      const vc = verdictClass(item.verdict);
+      bar.className = 'bar ' + vc;
+      bar.style.height = Math.max(3, (item.score / 100) * 36) + 'px';
+      bar.dataset.score = item.score;
+      bar.dataset.verdict = item.verdict;
+      bar.dataset.text = item.message.slice(0, 40);
+      bar.addEventListener('mouseenter', showChartTooltip);
+      bar.addEventListener('mousemove', moveChartTooltip);
+      bar.addEventListener('mouseleave', hideChartTooltip);
+      barChart.appendChild(bar);
+    });
+  }
+
+  function showChartTooltip(e) {
+    const bar = e.currentTarget;
+    const preview = bar.dataset.text.length >= 40 ? bar.dataset.text + '…' : bar.dataset.text;
+    chartTooltip.innerHTML =
+      'score: ' + bar.dataset.score + '<br>' +
+      'verdict: ' + bar.dataset.verdict + '<br>' +
+      '"' + preview + '"';
+    moveChartTooltip(e);
+    chartTooltip.classList.add('visible');
+  }
+
+  function moveChartTooltip(e) {
+    chartTooltip.style.left = (e.clientX + 10) + 'px';
+    chartTooltip.style.top = (e.clientY - 10) + 'px';
+  }
+
+  function hideChartTooltip() {
+    chartTooltip.classList.remove('visible');
+  }
+
+  function updateBarChart(entry) {
+    scoreHistory.push(entry);
+    if (scoreHistory.length > 20) scoreHistory.shift();
+    renderBarChart();
+  }
+
+  function updatePatterns(patterns) {
+    patternList.innerHTML = '';
+    if (!patterns || !patterns.length) {
+      const none = document.createElement('span');
+      none.className = 'pattern-none';
+      none.textContent = 'none';
+      patternList.appendChild(none);
+      return;
+    }
+    patterns.forEach((p) => {
+      const tag = document.createElement('span');
+      tag.className = 'pattern-tag';
+      tag.textContent = p;
+      patternList.appendChild(tag);
+    });
+  }
+
+  function toggleLogEntry(row) {
+    if (expandedLogEntry && expandedLogEntry !== row) {
+      expandedLogEntry.classList.remove('expanded');
+    }
+    if (row.classList.contains('expanded')) {
+      row.classList.remove('expanded');
+      expandedLogEntry = null;
+    } else {
+      row.classList.add('expanded');
+      expandedLogEntry = row;
+    }
+  }
+
+  function prependLogEntry(data) {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    logEntries.unshift({
+      score: data.risk_score,
+      verdict: data.verdict,
+      text: data.text,
+      time,
+      matched_categories: data.matched_categories || [],
+      category_details: data.category_details || {},
+      matched_patterns: data.matched_patterns || [],
+      scoring_breakdown: data.scoring_breakdown || {},
+    });
+    if (logEntries.length > 50) logEntries.pop();
+    renderLog();
+  }
+
+  function renderLog() {
+    logList.innerHTML = '';
+    const filtered = logFilter === 'all'
+      ? logEntries
+      : logEntries.filter(e => e.verdict === logFilter);
+
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'log-empty';
+      empty.textContent = logEntries.length === 0 ? 'No detections yet' : 'No matching entries';
+      logList.appendChild(empty);
+      return;
+    }
+
+    filtered.forEach((entry) => {
+      const container = document.createElement('div');
+      container.className = 'log-entry';
+      container.dataset.verdict = entry.verdict;
+      container.dataset.fulltext = entry.text;
+      container.dataset.categories = JSON.stringify(entry.category_details || {});
+      container.dataset.patterns = JSON.stringify(entry.matched_patterns || []);
+      container.dataset.breakdown = JSON.stringify(entry.scoring_breakdown || {});
+      container.dataset.score = entry.score;
+
+      const row = document.createElement('div');
+      row.className = 'log-row';
+
+      const scoreEl = document.createElement('span');
+      scoreEl.className = 'log-score c-' + verdictClass(entry.verdict);
+      scoreEl.textContent = entry.score;
+      row.appendChild(scoreEl);
+
+      const badge = document.createElement('span');
+      badge.className = 'log-badge ' + verdictClass(entry.verdict);
+      badge.textContent = entry.verdict.replace('_', ' ');
+      row.appendChild(badge);
+
+      const textEl = document.createElement('span');
+      textEl.className = 'log-text';
+      textEl.textContent = truncateLogText(entry.text);
+      textEl.title = entry.text;
+      row.appendChild(textEl);
+
+      const catTags = document.createElement('div');
+      catTags.className = 'log-cat-tags';
+      const cats = entry.matched_categories || [];
+      if (!cats.length) {
+        const dash = document.createElement('span');
+        dash.className = 'log-none';
+        dash.textContent = '—';
+        catTags.appendChild(dash);
+      } else {
+        cats.forEach((cat) => {
+          const baseScore = (entry.category_details && entry.category_details[cat])
+            ? entry.category_details[cat].base_score
+            : (CATEGORY_BASE_SCORES[cat] || 0);
+          const style = getCategoryPillStyle(baseScore);
+          const pill = document.createElement('span');
+          pill.className = 'log-cat-pill';
+          pill.textContent = cat.split('_')[0];
+          pill.style.borderColor = style.border;
+          pill.style.color = style.color;
+          pill.title = formatCategoryLabel(cat);
+          catTags.appendChild(pill);
+        });
+      }
+      row.appendChild(catTags);
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'log-time';
+      timeEl.textContent = entry.time;
+      row.appendChild(timeEl);
+
+      const chevron = document.createElement('span');
+      chevron.className = 'log-chevron';
+      chevron.textContent = '›';
+      row.appendChild(chevron);
+
+      row.addEventListener('click', () => toggleLogEntry(container));
+      container.appendChild(row);
+
+      const expand = document.createElement('div');
+      expand.className = 'log-expand-detail';
+      expand.appendChild(buildExpandedDetail(entry));
+      container.appendChild(expand);
+
+      logList.appendChild(container);
+    });
+  }
+
+  function loadLogsFromServer(logs) {
+    if (!logs || !logs.length) return;
+    logEntries = logs.slice(0, 50).map((l) => ({
+      score: l.risk_score,
+      verdict: l.verdict,
+      text: l.text,
+      time: l.timestamp
+        ? new Date(l.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : formatTime(new Date()),
+      matched_categories: l.matched_categories || [],
+      category_details: l.category_details || {},
+      matched_patterns: l.matched_patterns || [],
+      scoring_breakdown: l.scoring_breakdown || {},
+    }));
+    renderLog();
+  }
+
+  logFilters.addEventListener('click', (e) => {
+    const btn = e.target.closest('.lf-btn');
+    if (!btn) return;
+    logFilter = btn.dataset.filter;
+    logFilters.querySelectorAll('.lf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderLog();
+  });
+
+  async function fetchStats() {
+    try {
+      const r = await fetch('/stats');
+      if (r.ok) return await r.json();
+    } catch {}
+    return null;
+  }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch('/health');
+      const data = await r.json();
+      const online = data.detector === 'online';
+      statusDot.className = 'status-dot ' + (online ? 'online' : 'offline');
+      statusText.textContent = online ? 'detector online' : 'detector offline';
+    } catch {
+      statusDot.className = 'status-dot offline';
+      statusText.textContent = 'server unreachable';
+    }
+  }
+
+  function updateCharCount() {
+    const len = input.value.length;
+    if (len > 0) {
+      inputHintText.style.display = 'none';
+      charCount.textContent = len + ' chars';
+      charCount.classList.add('visible');
+      charCount.classList.remove('warn', 'danger');
+      if (len >= 1000) charCount.classList.add('danger');
+      else if (len >= 500) charCount.classList.add('warn');
+    } else {
+      inputHintText.style.display = 'inline';
+      charCount.classList.remove('visible', 'warn', 'danger');
+    }
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || inFlight) return;
+
+    hideEmptyHint();
+    input.value = '';
+    input.style.height = 'auto';
+    updateCharCount();
+    setInputDisabled(true);
+
+    addMessage('user', text);
+    showTyping();
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+
+      const data = await res.json();
+      removeTyping();
+
+      if (data.blocked) {
+        if (exportLog.length) exportLog[exportLog.length - 1].type = 'blocked_user';
+        blockedRequestCount++;
+        addMessage('system', data.reply, {
+          timestamp: data.timestamp,
+          blockedText: text,
+        });
+      } else {
+        addMessage('assistant', data.reply, {
+          verdict: data.verdict,
+          riskScore: data.risk_score,
+          timestamp: data.timestamp,
+        });
+      }
+
+      updateGauge(data.risk_score, data.verdict);
+      updateMlProb(data.injection_probability, data.verdict);
+      updateLastChecked(data.timestamp);
+      updatePatterns(data.matched_patterns);
+      updateBarChart({ score: data.risk_score, verdict: data.verdict, message: text });
+      prependLogEntry({
+        risk_score: data.risk_score,
+        verdict: data.verdict,
+        text,
+        matched_categories: data.matched_categories,
+        category_details: data.category_details,
+        matched_patterns: data.matched_patterns,
+        scoring_breakdown: data.scoring_breakdown,
+      });
+      updateThreatLevel(data.risk_score);
+      updateSparklines(data.verdict);
+      updateMismatchAlert(data);
+
+      const stats = await fetchStats();
+      if (stats) updateStats(stats);
+
+    } catch {
+      removeTyping();
+      addMessage('system', '⚠️ Could not reach the server. Make sure web_server.py is running.');
+    }
+
+    setInputDisabled(false);
+    input.focus();
+  }
+
+  async function clearChat() {
+    try { await fetch('/clear', { method: 'POST' }); } catch {}
+    messagesEl.innerHTML = '';
+    emptyHint.style.display = '';
+    userHasSent = false;
+    exportLog = [];
+    addMessage('assistant', "Chat cleared. Ask me anything!");
+  }
+
+  function exportConversation() {
+    if (!exportLog.length) return;
+    const lines = exportLog.map((entry) => {
+      if (entry.type === 'blocked_user') return '[BLOCKED] You: ' + entry.text;
+      if (entry.type === 'user') return '[' + formatExportTime(entry.timestamp) + '] You: ' + entry.text;
+      if (entry.type === 'assistant') return '[' + formatExportTime(entry.timestamp) + '] Claude: ' + entry.text;
+      return '[' + formatExportTime(entry.timestamp) + '] System: ' + entry.text;
+    });
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'securechat-' + new Date().toISOString().slice(0, 10) + '.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+    updateCharCount();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+  clearBtn.addEventListener('click', clearChat);
+  exportBtn.addEventListener('click', exportConversation);
+
+  autoScrollBtn.addEventListener('click', () => {
+    autoScroll = !autoScroll;
+    autoScrollBtn.classList.toggle('active', autoScroll);
+    if (autoScroll) scrollBottom();
+  });
+
+  async function init() {
+    Object.keys(sparkSvgs).forEach(renderSparkline);
+    if (blockedSep) blockedSep.style.display = 'none';
+
+    checkHealth();
+    setInterval(checkHealth, 15000);
+
+    try {
+      const logsRes = await fetch('/logs');
+      if (logsRes.ok) loadLogsFromServer(await logsRes.json());
+    } catch {}
+
+    const stats = await fetchStats();
+    if (stats) updateStats(stats);
+
+    addMessage('assistant', "Hello! I'm Claude. How can I help you today?");
+
+    input.focus();
+  }
+
+  init();
+</script>
+</body>
+</html>
