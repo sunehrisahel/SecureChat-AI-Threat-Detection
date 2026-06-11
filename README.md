@@ -1,4 +1,5 @@
 # AI Prompt Injection Detector
+<img width="1470" height="831" alt="image" src="https://github.com/user-attachments/assets/644ac017-16d2-43b2-bfca-33fd540a51ed" />
 
 A production-ready security middleware service that analyzes user-submitted text for AI threats before it reaches an LLM. Version 2.0 uses an **intent-aware 5-phase pipeline** that combines input normalization, intent classification, categorized regex detection, composite risk scoring, and response policy — exposed via a FastAPI backend with a Streamlit monitoring dashboard.
 
