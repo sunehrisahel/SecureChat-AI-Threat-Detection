@@ -147,15 +147,7 @@ class ChatResponse(BaseModel):
 @app.get("/health")
 async def health():
     """Check if this server and the detector are alive."""
-    detector_status = "online"
-    try:
-        import requests as req
-        r = req.get("http://localhost:8000/health", timeout=3)
-        if r.status_code != 200:
-            detector_status = "offline"
-    except Exception:
-        detector_status = "offline"
-
+    detector_status = "online" if detector_client.check_detector_health() else "offline"
     return {"status": "ok", "detector": detector_status}
 
 
@@ -179,8 +171,10 @@ async def get_stats():
 
 @app.get("/logs")
 async def get_logs():
-    """Return recent detection log entries from detections.json."""
-    logs = _read_recent_logs(MAX_LOG_ENTRIES)
+    """Return recent detection log entries from the detector API."""
+    logs = detector_client.get_detector_logs()
+    if not logs:
+        logs = _read_recent_logs(MAX_LOG_ENTRIES)
     return list(reversed(logs))
 
 

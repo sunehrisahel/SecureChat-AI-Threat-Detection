@@ -1,0 +1,16 @@
+[project]
+name = "prompt-injection-detector"
+version = "2.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "scikit-learn",
+    "pandas",
+    "pydantic",
+    "python-multipart",
+    "requests",
+]
+
+[tool.vercel]
+entrypoint = "app.main:app"

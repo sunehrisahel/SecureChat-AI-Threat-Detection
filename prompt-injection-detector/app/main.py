@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -15,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.analytics import compute_analytics
 from app.classifier import get_model_warning, load_model
 from app.models import AnalyticsResponse, AnalyzeRequest, AnalyzeResponse, HealthResponse
+from app.paths import detections_log_path
 from app.pipeline import analyze_text
 
 logging.basicConfig(
@@ -23,30 +22,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-LOGS_DIR = PROJECT_ROOT / "logs"
-DETECTIONS_LOG = LOGS_DIR / "detections.json"
 MAX_LOG_ENTRIES = 100
 
 
 def _ensure_logs_file() -> None:
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    if not DETECTIONS_LOG.exists():
-        DETECTIONS_LOG.touch()
-        logger.info("Created detections log at %s", DETECTIONS_LOG)
+    log_path = detections_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if not log_path.exists():
+        log_path.touch()
+        logger.info("Created detections log at %s", log_path)
 
 
 def _append_detection(entry: dict[str, Any]) -> None:
     _ensure_logs_file()
-    with DETECTIONS_LOG.open("a", encoding="utf-8") as f:
+    log_path = detections_log_path()
+    with log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
 
 def _read_recent_logs(limit: int = MAX_LOG_ENTRIES) -> list[dict[str, Any]]:
     _ensure_logs_file()
+    log_path = detections_log_path()
     entries: list[dict[str, Any]] = []
 
-    with DETECTIONS_LOG.open("r", encoding="utf-8") as f:
+    with log_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:

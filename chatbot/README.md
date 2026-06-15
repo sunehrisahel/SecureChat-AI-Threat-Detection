@@ -40,13 +40,28 @@ Copy the example env file and add your key:
 cp .env.example .env
 ```
 
-Edit `.env` and set `ANTHROPIC_API_KEY`. The chatbot loads it from the environment — never commit your API key to version control.
+Edit `.env` and set:
 
-## Run
+- `ANTHROPIC_API_KEY` — your Anthropic key
+- `DETECTOR_URL` — defaults to `http://localhost:8000/analyze` for local dev
+
+The chatbot loads these from the environment — never commit your API key to version control.
+
+For production deployment on Vercel, see [DEPLOY.md](../DEPLOY.md).
+
+## Run (terminal)
 
 ```bash
 python chatbot.py
 ```
+
+## Run (web UI)
+
+```bash
+uvicorn web_server:app --reload --port 3000
+```
+
+Open `http://localhost:3000`
 
 ## Commands
 
@@ -92,9 +107,13 @@ Goodbye!
 ```
 chatbot/
 ├── chatbot.py          # Main chatbot loop
+├── web_server.py       # FastAPI web UI (port 3000)
 ├── detector_client.py  # Communication with the detector API
 ├── llm_client.py       # Communication with the Claude API
 ├── config.py           # API keys, URLs, thresholds
+├── pyproject.toml      # Vercel entrypoint + dependencies
+├── vercel.json         # Vercel function config
+├── .env.example        # Local env template (copy to .env)
 ├── requirements.txt
 └── README.md
 ```

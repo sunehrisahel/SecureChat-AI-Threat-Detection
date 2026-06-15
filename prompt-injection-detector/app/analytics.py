@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DETECTIONS_LOG = PROJECT_ROOT / "logs" / "detections.json"
+from app.paths import detections_log_path
 
 # Labeled evaluation set for offline FP/FN estimates from logged outcomes.
 _EVAL_SAFE = [
@@ -28,11 +26,12 @@ _EVAL_BLOCK = [
 
 
 def _load_entries(limit: int | None = None) -> list[dict[str, Any]]:
-    if not DETECTIONS_LOG.exists():
+    log_path = detections_log_path()
+    if not log_path.exists():
         return []
 
     entries: list[dict[str, Any]] = []
-    with DETECTIONS_LOG.open("r", encoding="utf-8") as handle:
+    with log_path.open("r", encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:

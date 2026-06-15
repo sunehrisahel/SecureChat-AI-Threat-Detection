@@ -7,8 +7,22 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-DETECTOR_URL = "http://localhost:8000/analyze"
+DETECTOR_URL = os.getenv("DETECTOR_URL", "http://localhost:8000/analyze")
 DETECTOR_TIMEOUT = 5  # seconds
+
+
+def detector_health_url() -> str:
+    """Derive the detector health URL from DETECTOR_URL."""
+    if DETECTOR_URL.endswith("/analyze"):
+        return DETECTOR_URL[: -len("/analyze")] + "/health"
+    return DETECTOR_URL.rstrip("/") + "/health"
+
+
+def detector_logs_url() -> str:
+    """Derive the detector logs URL from DETECTOR_URL."""
+    if DETECTOR_URL.endswith("/analyze"):
+        return DETECTOR_URL[: -len("/analyze")] + "/logs"
+    return DETECTOR_URL.rstrip("/") + "/logs"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = "claude-haiku-4-5"

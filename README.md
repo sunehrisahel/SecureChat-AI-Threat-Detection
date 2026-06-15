@@ -304,6 +304,10 @@ cd prompt-injection-detector && python3 -m uvicorn app.main:app --port 8000
 cd ../chatbot && python3 web_server.py
 ```
 
+## Deployment
+
+See [DEPLOY.md](DEPLOY.md) for step-by-step Vercel deployment (two projects: detector + chatbot). Set `ANTHROPIC_API_KEY` and `DETECTOR_URL` as environment variables on the chatbot project only.
+
 ## License
 
 MIT
