@@ -91,7 +91,10 @@ def _update_session_stats(verdict: str, risk_score: int) -> None:
 
 
 def _read_recent_logs(limit: int = MAX_LOG_ENTRIES) -> list:
-    """Read recent entries from the detector's detections.json file."""
+    """Read recent detection logs from the detector API or local file."""
+    if os.getenv("VERCEL") or os.getenv("DETECTOR_URL", "").startswith("http"):
+        return detector_client.get_detector_logs()[:limit]
+
     if not os.path.exists(DETECTIONS_LOG):
         return []
 

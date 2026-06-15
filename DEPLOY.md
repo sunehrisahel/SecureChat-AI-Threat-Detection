@@ -103,14 +103,36 @@ vercel --prod
 
 | File | Purpose |
 |------|---------|
-| `prompt-injection-detector/pyproject.toml` | Entrypoint + production dependencies |
-| `prompt-injection-detector/vercel.json` | Exclude tests/dashboard from bundle |
-| `chatbot/pyproject.toml` | Entrypoint + dependencies |
-| `chatbot/vercel.json` | Function config |
+| `prompt-injection-detector/pyproject.toml` | Entrypoint (`app.main:app`) + production dependencies |
+| `prompt-injection-detector/vercel.json` | Minimal Vercel config (entrypoint comes from pyproject.toml) |
+| `prompt-injection-detector/.vercelignore` | Exclude tests/dashboard from upload |
+| `chatbot/pyproject.toml` | Entrypoint (`web_server:app`) + dependencies |
+| `chatbot/vercel.json` | Minimal Vercel config |
+| `chatbot/.vercelignore` | Exclude local env files from upload |
 
 ---
 
-## Known Vercel limitations
+## Troubleshooting deploy failures
+
+### Error: `app/main.py` doesn't match any Serverless Functions inside the api directory
+
+Your repo still has the old `vercel.json` with a `functions` block. Pull the latest `main` (or redeploy after the fix commit). Correct config is an **empty** `vercel.json`; the entrypoint comes from `pyproject.toml`:
+
+```toml
+[tool.vercel]
+entrypoint = "app.main:app"   # detector
+entrypoint = "web_server:app" # chatbot
+```
+
+### Build succeeds but chat shows "detector offline"
+
+Set `DETECTOR_URL` on the **chatbot** project to your detector URL + `/analyze`, e.g. `https://your-detector.vercel.app/analyze`.
+
+### Detector build fails on bundle size
+
+scikit-learn can exceed Vercel limits. Deploy the detector on [Render](https://render.com) instead and point `DETECTOR_URL` at that URL.
+
+---
 
 - **Cold starts** — first request after idle can take 10–30+ seconds (detector is heavier due to scikit-learn)
 - **Ephemeral logs** — detector logs are written to `/tmp` on Vercel and do not persist across invocations
