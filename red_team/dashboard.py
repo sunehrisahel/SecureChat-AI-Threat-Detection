@@ -33,7 +33,13 @@ if str(_ROOT) not in sys.path:
 _PROJECT_ROOT = _ROOT.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
-from attack_runner import AttackRunner, _extract_label_and_confidence, detector_health_url, normalize_detector_url
+from attack_runner import (
+    AttackRunner,
+    _extract_label_and_confidence,
+    _vercel_bypass_headers,
+    detector_health_url,
+    normalize_detector_url,
+)
 from welcome_3d import render_welcome_scene
 from ui_theme import (
     activity_drawer_html,
@@ -260,7 +266,7 @@ def score_attack(text: str, source: str = "red-team-dashboard") -> dict:
     import requests as req
 
     url = normalize_detector_url(st.session_state["detector_url"])
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", **_vercel_bypass_headers()}
     if st.session_state.get("detector_api_key"):
         headers["Authorization"] = f"Bearer {st.session_state['detector_api_key']}"
 

@@ -65,6 +65,7 @@ curl -X POST https://your-detector.vercel.app/analyze \
 | `ANTHROPIC_API_KEY` | `sk-ant-your-real-key` | Production, Preview, Development |
 | `DETECTOR_URL` | `https://your-detector.vercel.app/analyze` | Production, Preview, Development |
 | `DETECTOR_API_KEY` | same as detector project | Production, Preview |
+| `VERCEL_PROTECTION_BYPASS` | bypass secret from detector project (if Deployment Protection is on) | Production, Preview |
 | `ADMIN_API_KEY` | same as detector project | Production, Preview |
 | `ALLOWED_ORIGINS` | `https://your-chatbot.vercel.app` | Production |
 | `COOKIE_SECURE` | `true` | Production |
@@ -138,7 +139,12 @@ entrypoint = "web_server:app" # chatbot
 
 ### Build succeeds but chat shows "detector offline"
 
-Set `DETECTOR_URL` on the **chatbot** project to your detector URL + `/analyze`, e.g. `https://your-detector.vercel.app/analyze`.
+1. Set `DETECTOR_URL` on the **chatbot** project to your detector URL + `/analyze`, e.g. `https://your-detector.vercel.app/analyze`.
+2. If **Deployment Protection** is enabled on the detector Vercel project, server-to-server health checks get **401** before reaching FastAPI. Either:
+   - **Recommended for production APIs:** Detector project → **Settings** → **Deployment Protection** → copy **Protection Bypass for Automation** → set `VERCEL_PROTECTION_BYPASS` on the **chatbot** (and Render red-team) project to that value.
+   - **Or** disable Deployment Protection on the **detector** project (keep it on the chatbot UI if you want).
+3. Ensure `DETECTOR_API_KEY` on the chatbot matches the detector project when auth is enabled.
+4. Hover the "detector offline" label in SecureChat — the tooltip shows the server-side hint from `/health`.
 
 ### Detector build fails on bundle size
 

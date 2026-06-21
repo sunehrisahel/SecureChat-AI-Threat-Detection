@@ -2251,6 +2251,7 @@
       const online = data.detector === 'online';
       statusDot.className = 'status-dot ' + (online ? 'online' : 'offline');
       statusText.textContent = online ? 'detector online' : 'detector offline';
+      statusText.title = online ? '' : (data.detector_hint || 'Detector unreachable — check DETECTOR_URL and Vercel settings');
     } catch {
       statusDot.className = 'status-dot offline';
       statusText.textContent = 'server unreachable';

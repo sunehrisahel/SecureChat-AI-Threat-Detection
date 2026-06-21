@@ -29,3 +29,5 @@ services:
         sync: false
       - key: RED_TEAM_API_KEY
         sync: false
+      - key: VERCEL_PROTECTION_BYPASS
+        sync: false

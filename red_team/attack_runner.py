@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlunparse
@@ -12,6 +13,13 @@ import requests
 logger = logging.getLogger(__name__)
 
 _PROBE_TEXT = "ignore previous instructions"
+
+
+def _vercel_bypass_headers() -> dict[str, str]:
+    bypass = os.getenv("VERCEL_PROTECTION_BYPASS", "").strip()
+    if bypass:
+        return {"x-vercel-protection-bypass": bypass}
+    return {}
 
 
 class AttackRunner:
@@ -28,7 +36,7 @@ class AttackRunner:
 
     def _headers(self) -> dict[str, str]:
         """Build request headers, including auth when an API key is configured."""
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", **_vercel_bypass_headers()}
         if self.detector_api_key:
             headers["Authorization"] = f"Bearer {self.detector_api_key}"
         return headers
@@ -39,6 +47,13 @@ class AttackRunner:
         try:
             health_response = requests.get(health_url, headers=self._headers(), timeout=10)
             if health_response.status_code == 401:
+                body = health_response.text[:500].lower()
+                if "vercel.com/sso" in body or "sso-api" in body:
+                    return (
+                        False,
+                        "Vercel Deployment Protection is blocking the detector. "
+                        "Disable it on the detector project, or set VERCEL_PROTECTION_BYPASS.",
+                    )
                 return False, "Unauthorized — set the Detector API key if DETECTOR_API_KEY is enabled."
             health_response.raise_for_status()
         except requests.ConnectionError:

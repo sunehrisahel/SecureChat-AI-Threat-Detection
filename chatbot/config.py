@@ -12,6 +12,8 @@ DETECTOR_URL = os.getenv("DETECTOR_URL", "http://localhost:8000/analyze")
 DETECTOR_TIMEOUT = int(os.getenv("DETECTOR_TIMEOUT", "10"))
 DETECTOR_API_KEY = os.getenv("DETECTOR_API_KEY", "")
 DETECTOR_FAIL_OPEN = os.getenv("DETECTOR_FAIL_OPEN", "false").lower() in {"1", "true", "yes"}
+# Bypass Vercel Deployment Protection on the detector project (server-to-server calls).
+VERCEL_PROTECTION_BYPASS = os.getenv("VERCEL_PROTECTION_BYPASS", "").strip()
 
 # Production-style defaults: block warn-tier threats unless explicitly disabled.
 BLOCK_WARN_ACTION = os.getenv("BLOCK_WARN_ACTION", "true").lower() in {"1", "true", "yes"}

@@ -12,6 +12,7 @@ from config import (
     DETECTOR_FAIL_OPEN,
     DETECTOR_TIMEOUT,
     DETECTOR_URL,
+    VERCEL_PROTECTION_BYPASS,
     detector_health_url,
     detector_logs_url,
 )
@@ -45,6 +46,13 @@ def _admin_headers() -> dict[str, str]:
     return _auth_headers()
 
 
+def _request_headers(*, admin: bool = False) -> dict[str, str]:
+    headers = dict(_admin_headers() if admin else _auth_headers())
+    if VERCEL_PROTECTION_BYPASS:
+        headers["x-vercel-protection-bypass"] = VERCEL_PROTECTION_BYPASS
+    return headers
+
+
 def _handle_unavailable(reason: str) -> dict:
     if DETECTOR_FAIL_OPEN:
         logger.warning("Detector unavailable (%s). Fail-open enabled — allowing message.", reason)
@@ -53,18 +61,46 @@ def _handle_unavailable(reason: str) -> dict:
     return dict(_UNAVAILABLE)
 
 
-def check_detector_health() -> bool:
-    """Return True if the detector health endpoint responds successfully."""
+def _health_failure_hint(response: requests.Response | None, exc: Exception | None = None) -> str:
+    if response is not None and response.status_code == 401:
+        body = response.text[:500].lower()
+        if "vercel.com/sso" in body or "sso-api" in body:
+            return (
+                "Vercel Deployment Protection is blocking the detector. "
+                "Disable it on the detector project, or set VERCEL_PROTECTION_BYPASS "
+                "on this chatbot to the detector project's bypass secret."
+            )
+        return "Detector returned 401 — check DETECTOR_API_KEY matches the detector project."
+    if exc is not None:
+        return f"Cannot reach detector at {detector_health_url()}: {exc}"
+    return f"Detector health check failed at {detector_health_url()}."
+
+
+def probe_detector_health() -> tuple[bool, str | None]:
+    """Return (online, error_hint). error_hint is set when offline."""
     try:
         response = requests.get(
             detector_health_url(),
-            headers=_auth_headers(),
+            headers=_request_headers(),
             timeout=DETECTOR_TIMEOUT,
         )
+        if response.status_code == 401:
+            return False, _health_failure_hint(response)
         response.raise_for_status()
-        return True
-    except (requests.ConnectionError, requests.Timeout, requests.RequestException):
-        return False
+        return True, None
+    except (requests.ConnectionError, requests.Timeout) as exc:
+        return False, _health_failure_hint(None, exc)
+    except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        if response is not None:
+            return False, _health_failure_hint(response, exc)
+        return False, _health_failure_hint(None, exc)
+
+
+def check_detector_health() -> bool:
+    """Return True if the detector health endpoint responds successfully."""
+    online, _ = probe_detector_health()
+    return online
 
 
 def get_detector_logs() -> list:
@@ -72,7 +108,7 @@ def get_detector_logs() -> list:
     try:
         response = requests.get(
             detector_logs_url(),
-            headers=_admin_headers(),
+            headers=_request_headers(admin=True),
             timeout=DETECTOR_TIMEOUT,
         )
         response.raise_for_status()
@@ -97,7 +133,7 @@ def check_message(text: str, assistant_refused: bool = False) -> dict:
                 "source": "chatbot",
                 "assistant_refused": assistant_refused,
             },
-            headers=_auth_headers(),
+            headers=_request_headers(),
             timeout=DETECTOR_TIMEOUT,
         )
         response.raise_for_status()

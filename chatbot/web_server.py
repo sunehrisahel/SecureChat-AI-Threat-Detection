@@ -236,8 +236,11 @@ class ChatResponse(BaseModel):
 @app.get("/health")
 async def health():
     """Check if this server and the detector are alive."""
-    detector_status = "online" if detector_client.check_detector_health() else "offline"
-    return {"status": "ok", "detector": detector_status}
+    online, hint = detector_client.probe_detector_health()
+    payload = {"status": "ok", "detector": "online" if online else "offline"}
+    if hint:
+        payload["detector_hint"] = hint
+    return payload
 
 
 @app.post("/api/inject-message", response_model=InjectMessageResponse)
