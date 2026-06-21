@@ -41,8 +41,11 @@ def analyze_text(
     intent = intent_result["intent"]
     intent_confidence = intent_result["confidence"]
 
+    ml_result = predict(analysis_text)
+    injection_probability = float(ml_result["injection_probability"])
+
     threat = analyze_threats(analysis_text, intent)
-    risk = calculate_risk(intent, intent_confidence, threat)
+    risk = calculate_risk(intent, intent_confidence, threat, injection_probability)
     action = determine_action(risk["verdict"], intent, risk["risk_score"])
 
     pre_escalation_risk = risk["risk_score"]
@@ -61,7 +64,6 @@ def analyze_text(
 
     policy = build_policy(intent, risk["verdict"], risk["risk_score"], action)
 
-    ml_result = predict(analysis_text)
     legacy = threat["legacy"]
 
     legacy_verdict = risk["verdict"]
@@ -98,7 +100,7 @@ def analyze_text(
         "action": action,
         "intent": intent,
         "intent_confidence": intent_confidence,
-        "injection_probability": float(ml_result["injection_probability"]),
+        "injection_probability": injection_probability,
         "regex_matched": legacy.get("matched", False),
         "matched_patterns": legacy.get("matched_patterns", []),
         "matched_categories": legacy.get("matched_categories", []),

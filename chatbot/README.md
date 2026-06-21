@@ -49,6 +49,18 @@ The chatbot loads these from the environment — never commit your API key to ve
 
 For production deployment on Vercel, see [DEPLOY.md](../DEPLOY.md).
 
+### Security settings
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DETECTOR_FAIL_OPEN` | `false` | Block messages when detector is offline |
+| `BLOCK_WARN_ACTION` | `true` | Block suspicious `warn`-tier messages |
+| `DETECTOR_API_KEY` | (unset) | Auth token for detector `/analyze` |
+| `ADMIN_API_KEY` | (unset) | Auth token for `/logs` endpoints |
+| `RATE_LIMIT_CHAT` | `30` | Max messages per minute per session |
+
+For local dev without the detector running, set `DETECTOR_FAIL_OPEN=true` in `.env`.
+
 ## Run (terminal)
 
 ```bash

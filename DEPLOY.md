@@ -29,7 +29,14 @@ Vercel Project 2: chatbot
 3. Configure:
    - **Root Directory:** `prompt-injection-detector`
    - **Framework Preset:** Other (FastAPI is auto-detected via `pyproject.toml`)
-4. **Environment variables:** none required
+4. **Environment variables** (recommended for production):
+
+| Name | Value | Environments |
+|------|-------|--------------|
+| `DETECTOR_API_KEY` | random secret (e.g. `openssl rand -hex 32`) | Production, Preview |
+| `ADMIN_API_KEY` | random secret | Production, Preview |
+| `ALLOWED_ORIGINS` | `https://your-chatbot.vercel.app` | Production |
+
 5. Click **Deploy**
 6. Copy the production URL, e.g. `https://securechat-detector.vercel.app`
 
@@ -39,6 +46,7 @@ Verify:
 curl https://your-detector.vercel.app/health
 curl -X POST https://your-detector.vercel.app/analyze \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_DETECTOR_API_KEY" \
   -d '{"text": "hello", "source": "test"}'
 ```
 
@@ -56,6 +64,10 @@ curl -X POST https://your-detector.vercel.app/analyze \
 |------|-------|--------------|
 | `ANTHROPIC_API_KEY` | `sk-ant-your-real-key` | Production, Preview, Development |
 | `DETECTOR_URL` | `https://your-detector.vercel.app/analyze` | Production, Preview, Development |
+| `DETECTOR_API_KEY` | same as detector project | Production, Preview |
+| `ADMIN_API_KEY` | same as detector project | Production, Preview |
+| `ALLOWED_ORIGINS` | `https://your-chatbot.vercel.app` | Production |
+| `COOKIE_SECURE` | `true` | Production |
 
 4. Click **Deploy**
 5. Open `https://your-chatbot.vercel.app`
@@ -141,6 +153,21 @@ scikit-learn can exceed Vercel limits. Deploy the detector on [Render](https://r
 
 ---
 
+## Phase 1 security (production)
+
+| Feature | Behavior |
+|---------|----------|
+| **Fail-closed** | If the detector is unreachable, messages are **blocked** (set `DETECTOR_FAIL_OPEN=true` locally to disable) |
+| **Warn blocking** | `action: warn` messages are **blocked** before reaching Claude (`BLOCK_WARN_ACTION=true` by default) |
+| **Session isolation** | Each browser gets its own conversation via `securechat_session` cookie |
+| **Rate limits** | `/chat` — 30 req/min per session; `/analyze` — 60 req/min per IP |
+| **Auth** | When `DETECTOR_API_KEY` is set, `/analyze` requires `Authorization: Bearer …` |
+| **Admin endpoints** | When `ADMIN_API_KEY` is set, `/logs` and `/analytics` require admin token |
+
+Local dev works without API keys (open endpoints). **Always set both keys in production.**
+
+---
+
 ## API key security
 
 - Set `ANTHROPIC_API_KEY` only in Vercel **Environment Variables**
@@ -152,3 +179,26 @@ scikit-learn can exceed Vercel limits. Deploy the detector on [Render](https://r
 ## Alternative: Render (simpler)
 
 If Vercel deploy fails due to bundle size or cold starts, [Render](https://render.com) is a better fit for long-running Python servers. See the chatbot README for local setup.
+
+---
+
+## Step 4 — Deploy the Red Team Console (Render)
+
+Streamlit cannot run on Vercel serverless. Use [Render](https://render.com) with the included `render.yaml` blueprint.
+
+1. Push this repo to GitHub (Vercel auto-deploys detector + chatbot on `main`).
+2. Go to [render.com/deploy](https://render.com/deploy) → connect `SecureChat---AI-Threat-Detection`.
+3. Render detects `render.yaml` and creates **red-team-console**.
+4. Set these **secret** environment variables on the Render service:
+
+| Name | Value |
+|------|-------|
+| `RED_TEAM_PASSWORD` | your dashboard login password |
+| `ANTHROPIC_API_KEY` | `sk-ant-…` (Arena + Assistant) |
+| `DETECTOR_URL` | `https://your-detector.vercel.app/analyze` |
+| `DETECTOR_API_KEY` | same bearer token as detector project |
+| `RED_TEAM_API_KEY` | optional shared key for inject endpoints |
+
+5. Deploy → open `https://red-team-console.onrender.com` (URL varies).
+
+Session attack history persists locally on the Render disk via `.red_team_session.json` until the instance is redeployed or cleared.

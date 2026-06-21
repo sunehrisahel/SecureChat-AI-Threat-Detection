@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from config import BLOCKED_VERDICTS, MAX_HISTORY, SYSTEM_PROMPT
+from config import BLOCKED_VERDICTS, BLOCK_WARN_ACTION, MAX_HISTORY, SYSTEM_PROMPT
 from detector_client import check_detector_health, check_message
 from llm_client import get_response
 
@@ -18,10 +18,24 @@ def _trim_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
     return [history[0]] + history[-(MAX_HISTORY):]
 
 
+def _should_block(result: dict) -> bool:
+    if result.get("detector_unavailable"):
+        return True
+    action = result.get("action", "allow")
+    verdict = result.get("verdict", "safe")
+    if BLOCK_WARN_ACTION and action == "warn":
+        return True
+    if action == "block":
+        return True
+    return verdict in BLOCKED_VERDICTS
+
+
 def _print_banner(detector_online: bool) -> None:
     print("=== AI Chatbot with Injection Protection ===")
     status = "ONLINE" if detector_online else "OFFLINE"
     print(f"Injection detector: {status}")
+    if not detector_online:
+        print("Note: detector offline — messages will be blocked (fail-closed).")
     print("Type 'exit' to quit, 'clear' to reset, 'history' to see recent messages.")
     print()
 
@@ -38,8 +52,16 @@ def _print_history(history: list[dict[str, str]]) -> None:
     print("-----------------------")
 
 
-def _handle_blocked(verdict: str, risk_score: int, matched_patterns: list[str]) -> None:
-    print(f"⚠️  Message blocked (verdict={verdict}, score={risk_score})")
+def _handle_blocked(result: dict) -> None:
+    verdict = result.get("verdict", "safe")
+    risk_score = result.get("risk_score", 0)
+    matched_patterns = result.get("matched_patterns") or []
+    if result.get("detector_unavailable"):
+        print("⚠️  Message blocked — security check unavailable (fail-closed).")
+    elif result.get("action") == "warn" and BLOCK_WARN_ACTION:
+        print(f"⚠️  Message blocked (suspicious/warn, score={risk_score})")
+    else:
+        print(f"⚠️  Message blocked (verdict={verdict}, score={risk_score})")
     if matched_patterns:
         print(f"Matched patterns: {', '.join(matched_patterns)}")
     else:
@@ -79,12 +101,12 @@ def main() -> None:
 
         result = check_message(user_input)
         verdict = result.get("verdict", "safe")
+        action = result.get("action", "allow")
         risk_score = result.get("risk_score", 0)
-        print(f"[Detector] verdict={verdict} score={risk_score}")
+        print(f"[Detector] action={action} verdict={verdict} score={risk_score}")
 
-        if verdict in BLOCKED_VERDICTS:
-            matched_patterns = result.get("matched_patterns") or []
-            _handle_blocked(verdict, risk_score, matched_patterns)
+        if _should_block(result):
+            _handle_blocked(result)
             continue
 
         history.append({"role": "user", "content": user_input})

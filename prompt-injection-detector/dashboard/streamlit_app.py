@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 import time
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import requests
 import streamlit as st
+from dotenv import load_dotenv
 
-API_BASE_URL = "http://localhost:8000"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / "prompt-injection-detector" / ".env")
+
+API_BASE_URL = os.getenv("DETECTOR_DASHBOARD_URL", "http://localhost:8000")
 REFRESH_INTERVAL_SECONDS = 10
+MAX_LOGIN_ATTEMPTS = 5
 
 VERDICT_COLORS = {
     "safe": "#28a745",
@@ -27,9 +36,44 @@ VERDICT_BADGE_STYLES = {
 }
 
 
+def _dashboard_password() -> str:
+    return (
+        os.getenv("DETECTOR_DASHBOARD_PASSWORD")
+        or os.getenv("RED_TEAM_PASSWORD")
+        or ""
+    ).strip()
+
+
+def _password_matches(entered: str, expected: str) -> bool:
+    if not expected:
+        return False
+    return secrets.compare_digest(entered.encode("utf-8"), expected.encode("utf-8"))
+
+
+def _init_session_state() -> None:
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+    if "login_failures" not in st.session_state:
+        st.session_state["login_failures"] = 0
+
+
+def _auth_headers() -> dict[str, str]:
+    headers: dict[str, str] = {}
+    admin_key = (os.getenv("ADMIN_API_KEY") or "").strip()
+    detector_key = (os.getenv("DETECTOR_API_KEY") or "").strip()
+    token = admin_key or detector_key
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def _api_get(endpoint: str) -> dict | list | None:
     try:
-        response = requests.get(f"{API_BASE_URL}{endpoint}", timeout=5)
+        response = requests.get(
+            f"{API_BASE_URL}{endpoint}",
+            headers=_auth_headers(),
+            timeout=5,
+        )
         response.raise_for_status()
         return response.json()
     except requests.RequestException as exc:
@@ -42,6 +86,7 @@ def _api_post_analyze(text: str, source: str = "streamlit-dashboard") -> dict | 
         response = requests.post(
             f"{API_BASE_URL}/analyze",
             json={"text": text, "source": source},
+            headers=_auth_headers(),
             timeout=10,
         )
         response.raise_for_status()
@@ -71,12 +116,38 @@ def _style_log_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return styled
 
 
-def main() -> None:
-    st.set_page_config(
-        page_title="Prompt Injection Detector",
-        page_icon="🛡️",
-        layout="wide",
-    )
+def _render_login() -> None:
+    st.title("Detector Dashboard Login")
+    st.caption("Enter your password to access the monitoring dashboard.")
+
+    expected = _dashboard_password()
+    if not expected:
+        st.warning(
+            "Set DETECTOR_DASHBOARD_PASSWORD (or RED_TEAM_PASSWORD) in the project root `.env` "
+            "and restart the dashboard."
+        )
+
+    if st.session_state.get("login_failures", 0) >= MAX_LOGIN_ATTEMPTS:
+        st.error("Too many failed login attempts. Refresh the page to try again.")
+        return
+
+    password = st.text_input("Password", type="password", key="detector_login_password")
+    if st.button("Login", type="primary"):
+        if _password_matches(password, expected):
+            st.session_state["authenticated"] = True
+            st.session_state["login_failures"] = 0
+            st.rerun()
+        else:
+            st.session_state["login_failures"] = st.session_state.get("login_failures", 0) + 1
+            st.error("Incorrect password")
+
+
+def _render_dashboard() -> None:
+    with st.sidebar:
+        if st.button("Logout"):
+            st.session_state["authenticated"] = False
+            st.session_state["login_failures"] = 0
+            st.rerun()
 
     st.title("🛡️ AI Prompt Injection Detector")
     st.caption("Real-time monitoring dashboard connected to FastAPI backend")
@@ -164,6 +235,20 @@ def main() -> None:
     st.caption(f"Auto-refreshing every {REFRESH_INTERVAL_SECONDS} seconds")
     time.sleep(REFRESH_INTERVAL_SECONDS)
     st.rerun()
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="Prompt Injection Detector",
+        page_icon="🛡️",
+        layout="wide",
+    )
+    _init_session_state()
+
+    if st.session_state.get("authenticated"):
+        _render_dashboard()
+    else:
+        _render_login()
 
 
 if __name__ == "__main__":

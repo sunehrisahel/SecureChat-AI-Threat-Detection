@@ -1,0 +1,29 @@
+# Render Blueprint — Red Team Console (Streamlit)
+# Detector + SecureChat stay on Vercel (see DEPLOY.md).
+# After connecting this repo on Render, set secret env vars in the dashboard.
+
+services:
+  - type: web
+    name: red-team-console
+    runtime: python
+    plan: free
+    buildCommand: pip install -r red_team/requirements.txt
+    startCommand: >-
+      streamlit run red_team/dashboard.py
+      --server.port=$PORT
+      --server.address=0.0.0.0
+      --server.headless=true
+      --browser.gatherUsageStats=false
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: DETECTOR_URL
+        sync: false
+      - key: DETECTOR_API_KEY
+        sync: false
+      - key: RED_TEAM_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RED_TEAM_API_KEY
+        sync: false

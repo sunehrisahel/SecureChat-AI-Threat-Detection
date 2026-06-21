@@ -5,16 +5,36 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / "prompt-injection-detector" / ".env", override=False)
 
 from app.analytics import compute_analytics
 from app.classifier import get_model_warning, load_model
-from app.models import AnalyticsResponse, AnalyzeRequest, AnalyzeResponse, HealthResponse
+from app.models import (
+    AnalyticsResponse,
+    AnalyzeRequest,
+    AnalyzeResponse,
+    HealthResponse,
+    SuggestFixRequest,
+    SuggestFixResponse,
+)
 from app.paths import detections_log_path
 from app.pipeline import analyze_text
+from app.security import (
+    enforce_analyze_rate_limit,
+    require_admin_key,
+    require_detector_key,
+    require_red_team_key,
+)
+from app.suggest_fix import build_suggest_fix
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,6 +43,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MAX_LOG_ENTRIES = 100
+
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8502,http://127.0.0.1:8502"
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in __import__("os").getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+    if origin.strip()
+]
 
 
 def _ensure_logs_file() -> None:
@@ -79,7 +106,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,11 +119,16 @@ async def health() -> HealthResponse:
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
+async def analyze(
+    request: Request,
+    body: AnalyzeRequest,
+    _: None = Depends(require_detector_key),
+) -> AnalyzeResponse:
+    enforce_analyze_rate_limit(request)
     result = analyze_text(
-        request.text,
-        source=request.source,
-        assistant_refused=request.assistant_refused,
+        body.text,
+        source=body.source,
+        assistant_refused=body.assistant_refused,
     )
 
     log_entry = {
@@ -113,7 +145,7 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
 
     logger.info(
         "Analyzed request from %s: intent=%s action=%s risk=%d categories=%s",
-        request.source,
+        body.source,
         result["intent"],
         result["action"],
         result["risk_score"],
@@ -123,12 +155,21 @@ async def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
     return AnalyzeResponse(**result)
 
 
+@app.post("/suggest-fix", response_model=SuggestFixResponse)
+async def suggest_fix(
+    body: SuggestFixRequest,
+    _: None = Depends(require_red_team_key),
+) -> SuggestFixResponse:
+    """Suggest detector improvements for attacks that evaded classification."""
+    return build_suggest_fix(body)
+
+
 @app.get("/logs")
-async def get_logs() -> list[dict[str, Any]]:
+async def get_logs(_: None = Depends(require_admin_key)) -> list[dict[str, Any]]:
     return _read_recent_logs(MAX_LOG_ENTRIES)
 
 
 @app.get("/analytics", response_model=AnalyticsResponse)
-async def analytics() -> AnalyticsResponse:
+async def analytics(_: None = Depends(require_admin_key)) -> AnalyticsResponse:
     data = compute_analytics()
     return AnalyticsResponse(**data)

@@ -57,3 +57,15 @@ class AnalyticsResponse(BaseModel):
     block_rate: float
     warn_rate: float
     allow_rate: float
+
+
+class SuggestFixRequest(BaseModel):
+    attack_text: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class SuggestFixResponse(BaseModel):
+    weakness_detected: str
+    why_it_evaded: str
+    recommended_fix: str
+    retrain_tip: str

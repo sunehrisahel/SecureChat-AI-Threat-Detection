@@ -210,6 +210,79 @@
 
   .status-dot.offline { background: var(--blocked); }
 
+  /* Red-team "under attack" indicator in the header */
+  .status-dot.attack {
+    background: #ef4444;
+    animation: attack-pulse 1s infinite;
+  }
+
+  @keyframes attack-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+    50%      { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+  }
+
+  /* Pulsing red bar shown while injected attacks are arriving */
+  #attack-bar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #ef4444, #fca5a5, #ef4444);
+    background-size: 200% 100%;
+    animation: attack-bar-slide 1.2s linear infinite;
+    z-index: 9999;
+    pointer-events: none;
+  }
+
+  body.under-attack #attack-bar { display: block; }
+
+  @keyframes attack-bar-slide {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  /* Injected red-team messages: bubble + inline verdict badge */
+  .msg-wrap.injected-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bubble.injected-border-prompt_injection { border-left: 3px solid #ef4444; }
+  .bubble.injected-border-suspicious { border-left: 3px solid #f97316; }
+  .bubble.injected-border-safe { border-left: 3px solid #22c55e; }
+
+  .inject-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border-radius: 999px;
+    padding: 3px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .inject-badge.badge-prompt_injection {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+  }
+
+  .inject-badge.badge-suspicious {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.35);
+  }
+
+  .inject-badge.badge-safe {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+  }
+
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
     50%      { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
@@ -1156,6 +1229,8 @@
 </head>
 <body>
 
+<div id="attack-bar" aria-hidden="true"></div>
+
 <header>
   <div class="header-left">
     <div class="shield-icon">
@@ -1345,8 +1420,7 @@
   let inFlight = false;
   let hasRequests = false;
   let userHasSent = false;
-  let prevBlockedCount = 0;
-  let blockedRequestCount = 0;
+  let prevFlaggedCount = 0;
   let scoreHistory = [];
   let logEntries = [];
   let expandedLogEntry = null;
@@ -1611,6 +1685,100 @@
     bubble.appendChild(copyBtn);
   }
 
+  function injectBadgeText(verdict) {
+    if (verdict === 'prompt_injection') return '⛔ INJECTION';
+    if (verdict === 'suspicious') return '⚠️ SUSPICIOUS';
+    return '✅ EVADED';
+  }
+
+  let injectCursor = 0;
+  let attackIdleTimer = null;
+
+  function injectVerdictToLogVerdict(msg) {
+    if (msg.detector_verdict) return msg.detector_verdict;
+    if (msg.verdict === 'prompt_injection') return 'high_risk';
+    return msg.verdict;
+  }
+
+  function applyDetectionToPanel(text, data) {
+    const verdict = data.verdict;
+    updateGauge(data.risk_score, verdict);
+    updateMlProb(data.injection_probability || 0, verdict);
+    if (data.timestamp) updateLastChecked(data.timestamp);
+    updatePatterns(data.matched_patterns || []);
+    updateBarChart({ score: data.risk_score, verdict, message: text });
+    prependLogEntry({
+      risk_score: data.risk_score,
+      verdict,
+      text,
+      matched_categories: data.matched_categories || [],
+      category_details: data.category_details || {},
+      matched_patterns: data.matched_patterns || [],
+      scoring_breakdown: data.scoring_breakdown || {},
+    });
+    updateThreatLevel(data.risk_score);
+    updateSparklines(verdict);
+  }
+
+  function enterAttackMode() {
+    document.body.classList.add('under-attack');
+    statusDot.className = 'status-dot attack';
+    statusText.textContent = '🔴 Attack in progress';
+    clearTimeout(attackIdleTimer);
+    attackIdleTimer = setTimeout(exitAttackMode, 5000);
+  }
+
+  function exitAttackMode() {
+    document.body.classList.remove('under-attack');
+    checkHealth();
+  }
+
+  async function pollInjectedMessages() {
+    try {
+      const response = await fetch('/api/injected-messages?since=' + injectCursor, fetchOpts);
+      if (!response.ok) return;
+      const data = await response.json();
+      for (const msg of data.messages || []) {
+        handleInjectedMessage(msg);
+        injectCursor = Math.max(injectCursor, msg.id + 1);
+      }
+    } catch {}
+  }
+
+  function handleInjectedMessage(msg) {
+    enterAttackMode();
+    hideEmptyHint();
+    addMessage('user', msg.content, {
+      injected: true,
+      injectVerdict: msg.verdict,
+      timestamp: msg.timestamp,
+    });
+
+    if (msg.assistant_reply) {
+      const uiVerdict = msg.verdict === 'safe' ? 'safe'
+        : msg.verdict === 'suspicious' ? 'suspicious' : 'high_risk';
+      addMessage('assistant', msg.assistant_reply, {
+        verdict: uiVerdict,
+        riskScore: msg.risk_score,
+        timestamp: msg.timestamp,
+      });
+    }
+
+    const logVerdict = injectVerdictToLogVerdict(msg);
+    applyDetectionToPanel(msg.content, {
+      verdict: logVerdict,
+      risk_score: msg.risk_score,
+      injection_probability: msg.injection_probability,
+      timestamp: msg.timestamp,
+      matched_patterns: msg.matched_patterns,
+      matched_categories: msg.matched_categories,
+      category_details: msg.category_details,
+      scoring_breakdown: msg.scoring_breakdown,
+    });
+
+    fetchStats().then((stats) => { if (stats) updateStats(stats); });
+  }
+
   function addMessage(role, text, opts = {}) {
     const { verdict, timestamp, blockedText, riskScore } = opts;
     const ts = timestamp ? formatTime(timestamp) : formatTime(new Date());
@@ -1642,14 +1810,25 @@
     const wrap = document.createElement('div');
     wrap.className = 'msg-wrap';
     if (role === 'system' && blockedText) wrap.dataset.text = blockedText;
+    if (role === 'user' && opts.injected) wrap.classList.add('injected-row');
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
+    if (role === 'user' && opts.injected && opts.injectVerdict) {
+      bubble.classList.add('injected-border-' + opts.injectVerdict);
+    }
     if (role === 'assistant') bubble.innerHTML = parseMarkdown(text);
     else bubble.textContent = text;
 
     attachCopyBtn(bubble, text);
     wrap.appendChild(bubble);
+
+    if (role === 'user' && opts.injected && opts.injectVerdict) {
+      const badge = document.createElement('span');
+      badge.className = 'inject-badge badge-' + opts.injectVerdict;
+      badge.textContent = injectBadgeText(opts.injectVerdict);
+      wrap.appendChild(badge);
+    }
 
     if (role === 'assistant' && verdict === 'suspicious') {
       const warn = document.createElement('div');
@@ -1826,11 +2005,12 @@
       ? '1 request'
       : stats.total + ' requests';
 
-    if (blockedRequestCount > 0) {
-      blockedBadge.textContent = blockedRequestCount + ' blocked';
+    const flaggedCount = (stats.high_risk || 0) + (stats.blocked || 0);
+    if (flaggedCount > 0) {
+      blockedBadge.textContent = flaggedCount + ' flagged';
       blockedBadge.classList.add('visible');
       if (blockedSep) blockedSep.style.display = '';
-      if (blockedRequestCount > prevBlockedCount) {
+      if (flaggedCount > prevFlaggedCount) {
         blockedBadge.style.animation = 'none';
         void blockedBadge.offsetWidth;
         blockedBadge.style.animation = '';
@@ -1839,7 +2019,9 @@
       blockedBadge.classList.remove('visible');
       if (blockedSep) blockedSep.style.display = 'none';
     }
-    prevBlockedCount = blockedRequestCount;
+    prevFlaggedCount = flaggedCount;
+
+    if (stats.total > 0) hasRequests = true;
 
     const peak = scoreHistory.length
       ? Math.max(...scoreHistory.map(s => s.score))
@@ -2052,9 +2234,11 @@
     renderLog();
   });
 
+  const fetchOpts = { credentials: 'include' };
+
   async function fetchStats() {
     try {
-      const r = await fetch('/stats');
+      const r = await fetch('/stats', fetchOpts);
       if (r.ok) return await r.json();
     } catch {}
     return null;
@@ -2062,7 +2246,7 @@
 
   async function checkHealth() {
     try {
-      const r = await fetch('/health');
+      const r = await fetch('/health', fetchOpts);
       const data = await r.json();
       const online = data.detector === 'online';
       statusDot.className = 'status-dot ' + (online ? 'online' : 'offline');
@@ -2104,16 +2288,24 @@
     try {
       const res = await fetch('/chat', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       });
+
+      if (res.status === 429) {
+        removeTyping();
+        addMessage('system', '⚠️ Too many messages. Please wait a moment and try again.');
+        setInputDisabled(false);
+        input.focus();
+        return;
+      }
 
       const data = await res.json();
       removeTyping();
 
       if (data.blocked) {
         if (exportLog.length) exportLog[exportLog.length - 1].type = 'blocked_user';
-        blockedRequestCount++;
         addMessage('system', data.reply, {
           timestamp: data.timestamp,
           blockedText: text,
@@ -2126,22 +2318,16 @@
         });
       }
 
-      updateGauge(data.risk_score, data.verdict);
-      updateMlProb(data.injection_probability, data.verdict);
-      updateLastChecked(data.timestamp);
-      updatePatterns(data.matched_patterns);
-      updateBarChart({ score: data.risk_score, verdict: data.verdict, message: text });
-      prependLogEntry({
-        risk_score: data.risk_score,
+      applyDetectionToPanel(text, {
         verdict: data.verdict,
-        text,
+        risk_score: data.risk_score,
+        injection_probability: data.injection_probability,
+        timestamp: data.timestamp,
+        matched_patterns: data.matched_patterns,
         matched_categories: data.matched_categories,
         category_details: data.category_details,
-        matched_patterns: data.matched_patterns,
         scoring_breakdown: data.scoring_breakdown,
       });
-      updateThreatLevel(data.risk_score);
-      updateSparklines(data.verdict);
       updateMismatchAlert(data);
 
       const stats = await fetchStats();
@@ -2157,11 +2343,22 @@
   }
 
   async function clearChat() {
-    try { await fetch('/clear', { method: 'POST' }); } catch {}
+    try { await fetch('/clear', { method: 'POST', credentials: 'include' }); } catch {}
     messagesEl.innerHTML = '';
     emptyHint.style.display = '';
     userHasSent = false;
     exportLog = [];
+    logEntries = [];
+    scoreHistory = [];
+    expandedLogEntry = null;
+    renderLog();
+    renderBarChart();
+    try {
+      const logsRes = await fetch('/api/detection-log', fetchOpts);
+      if (logsRes.ok) loadLogsFromServer(await logsRes.json());
+    } catch {}
+    const stats = await fetchStats();
+    if (stats) updateStats(stats);
     addMessage('assistant', "Chat cleared. Ask me anything!");
   }
 
@@ -2211,9 +2408,11 @@
 
     checkHealth();
     setInterval(checkHealth, 15000);
+    pollInjectedMessages();
+    setInterval(pollInjectedMessages, 800);
 
     try {
-      const logsRes = await fetch('/logs');
+      const logsRes = await fetch('/api/detection-log', fetchOpts);
       if (logsRes.ok) loadLogsFromServer(await logsRes.json());
     } catch {}
 

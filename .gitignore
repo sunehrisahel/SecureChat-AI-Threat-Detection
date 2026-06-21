@@ -1,6 +1,10 @@
 .env
 .env.*
 !.env.example
+.red_team_session.json
+red_team/red_team_results.db
+red_team/*.db
+prompt-injection-detector/logs/
 
 .DS_Store
 __pycache__/
