@@ -69,6 +69,29 @@ _PERSISTED_SESSION_KEYS = (
     "total_suspicious",
     "total_evaded",
 )
+_LOCAL_DETECTOR_URL = "http://127.0.0.1:8000/analyze"
+
+
+def _env_detector_url() -> str:
+    return (os.getenv("DETECTOR_URL") or "").strip()
+
+
+def _env_detector_api_key() -> str:
+    return (os.getenv("DETECTOR_API_KEY") or "").strip()
+
+
+def _default_detector_url() -> str:
+    return normalize_detector_url(_env_detector_url() or _LOCAL_DETECTOR_URL)
+
+
+def _sync_detector_from_env() -> None:
+    """Production env vars (Render/Vercel) override localhost defaults."""
+    env_url = _env_detector_url()
+    env_key = _env_detector_api_key()
+    if env_url:
+        st.session_state["detector_url"] = normalize_detector_url(env_url)
+    if env_key:
+        st.session_state["detector_api_key"] = env_key
 
 NAV_HOME = "Home"
 NAV_CHAT = "Chat"
@@ -211,8 +234,8 @@ def _init_session_state() -> None:
         "total_caught": 0,
         "total_suspicious": 0,
         "total_evaded": 0,
-        "detector_url": "http://127.0.0.1:8000/analyze",
-        "detector_api_key": "",
+        "detector_url": _default_detector_url(),
+        "detector_api_key": _env_detector_api_key(),
         "detector_online": False,
         "login_failures": 0,
         "nav_page": NAV_HOME,
@@ -870,19 +893,30 @@ def show_welcome_page() -> None:
             st.rerun()
 
 
+def _configured_password() -> str:
+    return (os.getenv("RED_TEAM_PASSWORD") or "").strip()
+
+
 def show_login_page() -> None:
     _inject_theme()
     st.markdown(login_shell(), unsafe_allow_html=True)
     _, col, _ = st.columns([1, 1, 1])
     with col:
         if st.session_state.get("login_failures", 0) >= MAX_LOGIN_ATTEMPTS:
-            st.error("Too many attempts.")
+            st.error("Too many attempts. Refresh the page and try again.")
             return
-        if not os.getenv("RED_TEAM_PASSWORD"):
-            st.warning("Set RED_TEAM_PASSWORD in `.env`")
+        configured = _configured_password()
+        if not configured:
+            st.warning(
+                "Login password is not configured on this server. "
+                "Set **RED_TEAM_PASSWORD** in Render → Environment (or your local `.env`), "
+                "then redeploy / restart."
+            )
         pw = st.text_input("Password", type="password")
         if st.button("Sign in", type="primary", use_container_width=True):
-            if _password_matches(pw, os.getenv("RED_TEAM_PASSWORD") or ""):
+            if not configured:
+                st.error("Cannot sign in until RED_TEAM_PASSWORD is set on the server.")
+            elif _password_matches(pw.strip(), configured):
                 st.session_state["authenticated"] = True
                 st.session_state["login_failures"] = 0
                 if not st.session_state.get("session_id"):
@@ -1239,6 +1273,7 @@ def _render_sidebar() -> str:
 def main() -> None:
     st.set_page_config("Red Team Console", "⬡", layout="wide", initial_sidebar_state="expanded")
     _init_session_state()
+    _sync_detector_from_env()
     if not st.session_state.get("authenticated"):
         show_login_page()
         return
