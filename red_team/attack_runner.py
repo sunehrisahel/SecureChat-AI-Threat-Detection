@@ -214,6 +214,28 @@ def _extract_label_and_confidence(data: dict) -> tuple[str, float]:
     return "safe", confidence
 
 
+def format_detector_http_error(response: requests.Response | None, url: str = "") -> str:
+    """Turn detector HTTP failures into actionable messages."""
+    if response is None:
+        return "Detector request failed"
+    if response.status_code == 401:
+        body = response.text[:800].lower()
+        if "vercel.com/sso" in body or "sso-api" in body or "vercel authentication" in body:
+            return (
+                "401 from Vercel Deployment Protection (not your API key). "
+                "On the detector Vercel project: disable Deployment Protection for Production, "
+                "OR copy the Protection Bypass secret into VERCEL_PROTECTION_BYPASS on this app."
+            )
+        try:
+            detail = response.json().get("detail")
+            if detail:
+                return f"401 Unauthorized — {detail}. Check DETECTOR_API_KEY matches the detector project."
+        except (ValueError, AttributeError):
+            pass
+        return "401 Unauthorized — check DETECTOR_API_KEY matches the detector project."
+    return f"HTTP {response.status_code} from detector{f' ({url})' if url else ''}"
+
+
 def normalize_detector_url(detector_url: str) -> str:
     """Ensure the URL targets the POST /analyze endpoint."""
     url = detector_url.strip().rstrip("/")

@@ -138,6 +138,15 @@ def check_message(text: str, assistant_refused: bool = False) -> dict:
         )
         response.raise_for_status()
         return response.json()
+    except requests.HTTPError as exc:
+        response = getattr(exc, "response", None)
+        if response is not None and response.status_code == 401:
+            body = response.text[:800].lower()
+            if "vercel.com/sso" in body or "sso-api" in body or "vercel authentication" in body:
+                return _handle_unavailable(
+                    "Vercel Deployment Protection — set VERCEL_PROTECTION_BYPASS or disable protection on detector"
+                )
+        return _handle_unavailable(str(exc))
     except (requests.ConnectionError, requests.Timeout) as exc:
         return _handle_unavailable(exc.__class__.__name__)
     except requests.RequestException as exc:

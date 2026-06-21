@@ -38,6 +38,7 @@ from attack_runner import (
     _extract_label_and_confidence,
     _vercel_bypass_headers,
     detector_health_url,
+    format_detector_http_error,
     normalize_detector_url,
 )
 from welcome_3d import render_welcome_scene
@@ -279,6 +280,17 @@ def score_attack(text: str, source: str = "red-team-dashboard") -> dict:
         )
         response.raise_for_status()
         result = response.json()
+    except req.HTTPError as exc:
+        error = format_detector_http_error(getattr(exc, "response", None), url)
+        return {
+            "text": text,
+            "verdict": "error",
+            "confidence": 0.0,
+            "risk_score": 0,
+            "evaded": False,
+            "error": error,
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+        }
     except Exception as exc:
         return {
             "text": text,
