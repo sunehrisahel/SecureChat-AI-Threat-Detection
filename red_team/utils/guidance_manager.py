@@ -11,7 +11,10 @@ _GUIDANCE_FILE = Path(__file__).resolve().parent.parent / "guidance_content.json
 
 
 def _normalize_category_key(name: str) -> str:
-    return str(name or "").strip().lower().replace(" ", "_").replace("-", "_")
+    key = str(name or "").strip().upper().replace(" ", "_").replace("-", "_")
+    if key.endswith("_MUTATED"):
+        key = key[: -len("_MUTATED")]
+    return key
 
 
 @st.cache_resource

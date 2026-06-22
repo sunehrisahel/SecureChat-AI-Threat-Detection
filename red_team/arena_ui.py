@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from components.arena_display import category_label, render_attack_list, truncate_prompt
+from components.category_legend import render_arena_category_legend
 from components.guidance_wizard import show_section_guidance
 from ui_theme import metric_card_html
 
@@ -317,6 +318,9 @@ def render_arena_results(
         f"class='mono'>Showing {len(visible)} of {len(arena_log)} attacks</div>",
         unsafe_allow_html=True,
     )
+
+    render_arena_category_legend()
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     render_attack_list(visible)
 

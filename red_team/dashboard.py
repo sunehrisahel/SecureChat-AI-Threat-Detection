@@ -47,6 +47,7 @@ from components.guidance_wizard import (
     show_section_guidance,
     show_welcome_wizard,
 )
+from components.category_legend import render_sidebar_category_key
 from attack_runner import (
     AttackRunner,
     _extract_label_and_confidence,
@@ -815,7 +816,6 @@ def run_arena() -> None:
 
 def _render_arena_workspace() -> None:
     _hydrate_arena_from_db()
-    show_welcome_wizard()
     arena_log = st.session_state.get("arena_log") or []
     metrics_cache = st.session_state.get("arena_metrics_cache")
     critique = st.session_state.get("arena_critique")
@@ -962,6 +962,7 @@ def show_login_page() -> None:
 
 def show_workspace_page() -> None:
     _render_shell()
+    show_welcome_wizard()
     _render_mode_toggle()
 
     drawer_open = st.session_state["activity_drawer_open"]
@@ -989,6 +990,19 @@ def show_workspace_page() -> None:
 
 
 def _render_assistant_workspace() -> None:
+    st.markdown(
+        """
+        <div style='margin-bottom:16px;'>
+            <div style='font-size:18px;font-weight:700;color:var(--text-primary);'>🤖 Assistant</div>
+            <div style='font-size:13px;color:var(--text-dim);margin-top:4px;'>
+                Chat about detections, evasions, and fixes — payloads can be scored live via your detector.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    show_section_guidance("assistant")
+
     if not st.session_state["chat_messages"]:
         st.markdown(empty_workspace(), unsafe_allow_html=True)
         st.markdown(
@@ -1017,6 +1031,17 @@ def _render_assistant_workspace() -> None:
 
 
 def _render_attack_lab_workspace() -> None:
+    st.markdown(
+        """
+        <div style='margin-bottom:16px;'>
+            <div style='font-size:18px;font-weight:700;color:var(--text-primary);'>🎯 Attack Test</div>
+            <div style='font-size:13px;color:var(--text-dim);margin-top:4px;'>
+                Fire category prompts or custom payloads against your live detector.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     show_section_guidance("attack_lab")
     st.markdown(
         '<div style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">'
@@ -1230,12 +1255,21 @@ def _render_sidebar() -> str:
                 type="primary" if is_active else "secondary",
             ):
                 st.session_state["nav_page"] = page_key
+                if page_key == NAV_CHAT:
+                    st.session_state["workspace_mode"] = "assistant"
+                elif page_key == NAV_ATTACK:
+                    st.session_state["workspace_mode"] = "attack"
+                elif page_key == NAV_ARENA:
+                    st.session_state["workspace_mode"] = "arena"
                 st.rerun()
 
         st.markdown(
             "<div style='height:1px; background:var(--border-hairline); margin:24px 0 18px 0;'></div>",
             unsafe_allow_html=True,
         )
+
+        render_sidebar_category_key()
+        show_attack_category_reference()
 
         if current == NAV_ARENA:
             arena_log = st.session_state.get("arena_log") or []
@@ -1261,11 +1295,6 @@ def _render_sidebar() -> str:
 
         st.markdown(
             "<div style='height:1px; background:var(--border-hairline); margin:20px 0 16px 0;'></div>",
-            unsafe_allow_html=True,
-        )
-        show_attack_category_reference()
-        st.markdown(
-            "<div style='height:1px; background:var(--border-hairline); margin:16px 0 16px 0;'></div>",
             unsafe_allow_html=True,
         )
         st.markdown(sidebar_section_label("System"), unsafe_allow_html=True)
@@ -1335,11 +1364,11 @@ def main() -> None:
     if page == NAV_HOME:
         show_welcome_page()
     elif page == NAV_CHAT:
-        if st.session_state["workspace_mode"] not in ("assistant", "attack", "arena"):
-            st.session_state["workspace_mode"] = "assistant"
+        st.session_state["workspace_mode"] = "assistant"
         show_workspace_page()
     elif page == NAV_ATTACK:
-        show_attack_lab_page()
+        st.session_state["workspace_mode"] = "attack"
+        show_workspace_page()
     elif page == NAV_ARENA:
         show_arena_page()
     elif page == NAV_RESULTS:
