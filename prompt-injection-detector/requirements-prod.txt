@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+scikit-learn
+pandas
+pydantic
+python-multipart
+requests
+python-dotenv

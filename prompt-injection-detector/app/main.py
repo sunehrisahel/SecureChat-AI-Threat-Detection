@@ -88,12 +88,15 @@ def _read_recent_logs(limit: int = MAX_LOG_ENTRIES) -> list[dict[str, Any]]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_logs_file()
-    loaded = load_model()
-    if loaded:
-        logger.info("ML classifier ready")
+    if not __import__("os").getenv("SKIP_STARTUP_MODEL_LOAD"):
+        loaded = load_model()
+        if loaded:
+            logger.info("ML classifier ready")
+        else:
+            warning = get_model_warning()
+            logger.warning("ML classifier unavailable: %s", warning)
     else:
-        warning = get_model_warning()
-        logger.warning("ML classifier unavailable: %s", warning)
+        logger.info("Deferring ML model load until first /analyze request")
     yield
 
 

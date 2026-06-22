@@ -88,7 +88,12 @@ def _env_detector_api_key() -> str:
 
 
 def _default_detector_url() -> str:
-    return normalize_detector_url(_env_detector_url() or _LOCAL_DETECTOR_URL)
+    env_url = _env_detector_url()
+    if env_url:
+        return normalize_detector_url(env_url)
+    if os.getenv("RENDER"):
+        return normalize_detector_url("https://prompt-injection-detector.onrender.com/analyze")
+    return normalize_detector_url(_LOCAL_DETECTOR_URL)
 
 
 def _sync_detector_from_env() -> None:

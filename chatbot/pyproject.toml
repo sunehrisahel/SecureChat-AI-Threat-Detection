@@ -8,12 +8,7 @@ dependencies = [
     "requests",
     "fastapi",
     "uvicorn",
-    "scikit-learn",
-    "pandas",
-    "pydantic",
-    "python-multipart",
 ]
 
 [tool.vercel]
 entrypoint = "web_server:app"
-buildCommand = "bash bundle_detector.sh && pip install ."

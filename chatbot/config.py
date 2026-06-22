@@ -8,7 +8,12 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-DETECTOR_URL = os.getenv("DETECTOR_URL", "http://localhost:8000/analyze")
+DETECTOR_URL = os.getenv("DETECTOR_URL", "").strip()
+if not DETECTOR_URL:
+    if os.getenv("VERCEL"):
+        DETECTOR_URL = "https://prompt-injection-detector.onrender.com/analyze"
+    else:
+        DETECTOR_URL = "http://localhost:8000/analyze"
 DETECTOR_TIMEOUT = int(os.getenv("DETECTOR_TIMEOUT", "10"))
 DETECTOR_API_KEY = os.getenv("DETECTOR_API_KEY", "")
 DETECTOR_FAIL_OPEN = os.getenv("DETECTOR_FAIL_OPEN", "false").lower() in {"1", "true", "yes"}

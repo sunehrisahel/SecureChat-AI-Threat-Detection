@@ -131,6 +131,10 @@ def predict(text: str) -> dict[str, float | Literal["safe", "injection"] | str |
     Returns:
         Dict with injection_probability, label, and optional warning.
     """
+    global _loaded_pipeline, _model_warning
+    if _loaded_pipeline is None and _model_warning is None:
+        load_model()
+
     if _loaded_pipeline is None:
         return {
             "injection_probability": DEFAULT_INJECTION_PROBABILITY,

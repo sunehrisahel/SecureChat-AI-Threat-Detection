@@ -63,14 +63,14 @@ curl -X POST https://your-detector.vercel.app/analyze \
 | Name | Value | Environments |
 |------|-------|--------------|
 | `ANTHROPIC_API_KEY` | `sk-ant-your-real-key` | Production, Preview, Development |
-| `DETECTOR_URL` | optional — leave unset on Vercel; SecureChat bundles the detector in-process | Production |
+| `DETECTOR_URL` | optional — defaults to Render detector URL on Vercel | Production |
 | `DETECTOR_API_KEY` | optional when using inline detector | Production, Preview |
 | `VERCEL_PROTECTION_BYPASS` | bypass secret from detector project (if Deployment Protection is on) | Production, Preview |
 | `ADMIN_API_KEY` | same as detector project | Production, Preview |
 | `ALLOWED_ORIGINS` | `https://your-chatbot.vercel.app` | Production |
 | `COOKIE_SECURE` | `true` | Production |
 
-**Note:** The chatbot build runs `bundle_detector.sh`, which copies `prompt-injection-detector` into the deployment. On Vercel, analysis runs **in-process** — no cross-project `/analyze` call, so Deployment Protection on a separate detector project no longer breaks SecureChat. You do **not** need `DETECTOR_URL` pointing at another Vercel project unless you want an external detector.
+**Note:** SecureChat on Vercel calls the detector on **Render** (`https://prompt-injection-detector.onrender.com/analyze`) by default. Deploy the Render blueprint first (Step 4). Override with `DETECTOR_URL` if needed.
 
 4. Click **Deploy**
 5. Open `https://your-chatbot.vercel.app`

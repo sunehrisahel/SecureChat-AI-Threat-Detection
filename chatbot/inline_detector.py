@@ -48,14 +48,14 @@ def is_available() -> bool:
 
 
 def should_use_inline() -> bool:
-    """Prefer in-process detector on Vercel when bundled (avoids cross-project 401)."""
+    """Use in-process detector only for local dev (never on Vercel — bundle too heavy)."""
     mode = os.getenv("INLINE_DETECTOR", "auto").strip().lower()
     if mode in {"0", "false", "no", "off"}:
         return False
+    if os.getenv("VERCEL"):
+        return False
     if mode in {"1", "true", "yes", "on"}:
         return is_available()
-    if os.getenv("VERCEL") and is_available():
-        return True
     url = os.getenv("DETECTOR_URL", "")
     if is_available() and (
         not url.strip()

@@ -1,5 +1,5 @@
 # Render Blueprint — detector API + Red Team Console
-# SecureChat stays on Vercel with an inline bundled detector (see chatbot/bundle_detector.sh).
+# SecureChat on Vercel calls the Render detector (see chatbot/config.py default DETECTOR_URL).
 
 services:
   - type: web
@@ -8,14 +8,14 @@ services:
     plan: free
     branch: main
     rootDir: prompt-injection-detector
-    buildCommand: pip install fastapi uvicorn scikit-learn pandas pydantic python-multipart requests python-dotenv
+    buildCommand: pip install -r requirements-prod.txt
     startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.0"
-      - key: DETECTOR_API_KEY
-        generateValue: true
+      - key: SKIP_STARTUP_MODEL_LOAD
+        value: "true"
 
   - type: web
     name: red-team-console
@@ -37,11 +37,6 @@ services:
         generateValue: true
       - key: DETECTOR_URL
         value: https://prompt-injection-detector.onrender.com/analyze
-      - key: DETECTOR_API_KEY
-        fromService:
-          type: web
-          name: prompt-injection-detector
-          envVarKey: DETECTOR_API_KEY
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: RED_TEAM_API_KEY
