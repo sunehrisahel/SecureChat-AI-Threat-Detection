@@ -41,6 +41,12 @@ from arena_db import (
     save_arena_run,
 )
 from arena_ui import render_arena_results, render_metrics_bar
+from components.guidance_wizard import (
+    show_attack_category_reference,
+    show_category_guidance_modal,
+    show_section_guidance,
+    show_welcome_wizard,
+)
 from attack_runner import (
     AttackRunner,
     _extract_label_and_confidence,
@@ -809,6 +815,7 @@ def run_arena() -> None:
 
 def _render_arena_workspace() -> None:
     _hydrate_arena_from_db()
+    show_welcome_wizard()
     arena_log = st.session_state.get("arena_log") or []
     metrics_cache = st.session_state.get("arena_metrics_cache")
     critique = st.session_state.get("arena_critique")
@@ -816,6 +823,7 @@ def _render_arena_workspace() -> None:
         st.session_state["arena_critique"] = generate_critique(arena_log)
         critique = st.session_state["arena_critique"]
     if arena_log:
+        show_section_guidance("metrics_bar")
         render_metrics_bar(arena_log, metrics_cache)
         st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
@@ -1009,6 +1017,7 @@ def _render_assistant_workspace() -> None:
 
 
 def _render_attack_lab_workspace() -> None:
+    show_section_guidance("attack_lab")
     st.markdown(
         '<div style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">'
         "Select a category to fire a live test against your detector.</div>",
@@ -1027,6 +1036,7 @@ def _render_attack_lab_workspace() -> None:
                     ),
                     unsafe_allow_html=True,
                 )
+                show_category_guidance_modal(cat["name"])
                 if st.button(f"Run Test", key=f"cat_{cat['name']}", use_container_width=True):
                     record = score_attack(cat["prompt"], source="red-team-category")
                     if record.get("verdict") != "error":
@@ -1238,6 +1248,11 @@ def _render_sidebar() -> str:
 
         st.markdown(
             "<div style='height:1px; background:var(--border-hairline); margin:20px 0 16px 0;'></div>",
+            unsafe_allow_html=True,
+        )
+        show_attack_category_reference()
+        st.markdown(
+            "<div style='height:1px; background:var(--border-hairline); margin:16px 0 16px 0;'></div>",
             unsafe_allow_html=True,
         )
         st.markdown(sidebar_section_label("System"), unsafe_allow_html=True)

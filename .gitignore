@@ -3,6 +3,7 @@
 !.env.example
 chatbot/bundled_detector/
 .red_team_session.json
+red_team/.guidance_welcome_dismissed
 red_team/red_team_results.db
 red_team/*.db
 prompt-injection-detector/logs/

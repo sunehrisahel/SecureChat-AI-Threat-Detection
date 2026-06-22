@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from components.guidance_wizard import show_category_guidance_modal, show_section_guidance
 from ui_theme import metric_card_html
 
 
@@ -267,6 +268,7 @@ def render_attack_row(entry: dict) -> None:
     col_bad, col_good = st.columns([1, 1])
     with col_bad:
         st.caption(f"BAD BOT · {cat}" + (" · mutated" if entry.get("mutated") else ""))
+        show_category_guidance_modal(cat)
     with col_good:
         if entry.get("verdict") == "error":
             st.error(entry.get("error", "Detector error"))
@@ -369,6 +371,8 @@ def render_arena_results(
 
     filter_mode, filter_category, sort_mode = render_filter_controls(arena_log, metrics)
 
+    show_section_guidance("attack_list")
+
     if test_run_id:
         from arena_db import query_attacks
 
@@ -388,6 +392,8 @@ def render_arena_results(
     if critique:
         render_metadata_panel(meta, arena_log)
         render_category_chart(metrics)
+
+        show_section_guidance("debrief")
 
         st.markdown(
             """
