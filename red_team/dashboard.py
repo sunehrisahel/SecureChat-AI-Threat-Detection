@@ -40,7 +40,7 @@ from arena_db import (
     migrate_db,
     save_arena_run,
 )
-from arena_ui import render_arena_results, render_metrics_bar
+from arena_ui import render_arena_results, render_arena_sidebar_filters, render_metrics_bar
 from components.guidance_wizard import (
     show_attack_category_reference,
     show_category_guidance_modal,
@@ -1236,6 +1236,19 @@ def _render_sidebar() -> str:
             "<div style='height:1px; background:var(--border-hairline); margin:24px 0 18px 0;'></div>",
             unsafe_allow_html=True,
         )
+
+        if current == NAV_ARENA:
+            arena_log = st.session_state.get("arena_log") or []
+            if arena_log:
+                render_arena_sidebar_filters(
+                    arena_log,
+                    st.session_state.get("arena_metrics_cache"),
+                )
+                st.markdown(
+                    "<div style='height:1px; background:var(--border-hairline); margin:18px 0 18px 0;'></div>",
+                    unsafe_allow_html=True,
+                )
+
         st.markdown(sidebar_section_label("Session"), unsafe_allow_html=True)
         st.markdown(
             sidebar_session_stats(

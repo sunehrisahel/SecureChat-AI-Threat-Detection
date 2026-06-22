@@ -10,19 +10,9 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from components.guidance_wizard import show_category_guidance_modal, show_section_guidance
+from components.arena_display import category_label, render_attack_list, truncate_prompt
+from components.guidance_wizard import show_section_guidance
 from ui_theme import metric_card_html
-
-
-def category_label(technique: str) -> str:
-    return str(technique or "unknown").upper().replace(" ", "_").replace("-", "_")
-
-
-def truncate_prompt(text: str, limit: int = 100) -> str:
-    text = text or ""
-    if len(text) <= limit:
-        return text
-    return text[: limit - 3] + "..."
 
 
 def arena_metrics(arena_log: list[dict]) -> dict[str, Any]:
@@ -154,139 +144,81 @@ def render_metrics_bar(arena_log: list[dict], metrics: dict[str, Any] | None = N
         )
 
 
-def render_filter_controls(
+def render_arena_sidebar_filters(
     arena_log: list[dict],
     metrics: dict[str, Any] | None = None,
 ) -> tuple[str, str | None, str]:
+    """Arena filter/sort controls — sidebar only."""
     m = metrics or cached_arena_metrics(json.dumps(arena_log, sort_keys=True))
-    evaded_n = m["evaded"]
-    caught_n = m["caught"]
-    total_n = m["total"]
+    st.markdown("##### 📊 Filter Attacks")
 
-    filter_mode = st.session_state.get("arena_filter", "all")
-    sort_mode = st.session_state.get("arena_sort", "most_recent")
-    filter_category = st.session_state.get("arena_filter_category")
+    filter_mode = st.radio(
+        "Show",
+        ["all", "evaded", "caught"],
+        format_func=lambda v: {
+            "all": f"All Attacks ({m['total']})",
+            "evaded": f"Evaded Only ({m['evaded']})",
+            "caught": f"Caught Only ({m['caught']})",
+        }[v],
+        index=["all", "evaded", "caught"].index(
+            st.session_state.get("arena_filter", "all")
+            if st.session_state.get("arena_filter") in ("all", "evaded", "caught")
+            else "all"
+        ),
+        key="arena_sidebar_filter_mode",
+        label_visibility="collapsed",
+    )
+    st.session_state["arena_filter"] = filter_mode
 
-    f1, f2, f3, f4, f5 = st.columns([1, 1, 1, 1, 1.2])
-    with f1:
-        if st.button(f"All ({total_n})", key="arena_f_all", use_container_width=True,
-                     type="primary" if filter_mode == "all" else "secondary"):
-            st.session_state["arena_filter"] = "all"
-            st.rerun()
-    with f2:
-        if st.button(f"Evaded ({evaded_n})", key="arena_f_evaded", use_container_width=True,
-                     type="primary" if filter_mode == "evaded" else "secondary"):
-            st.session_state["arena_filter"] = "evaded"
-            st.rerun()
-    with f3:
-        if st.button(f"Caught ({caught_n})", key="arena_f_caught", use_container_width=True,
-                     type="primary" if filter_mode == "caught" else "secondary"):
-            st.session_state["arena_filter"] = "caught"
-            st.rerun()
-    with f4:
-        if st.button("By Category", key="arena_f_cat", use_container_width=True,
-                     type="primary" if filter_mode == "category" else "secondary"):
-            st.session_state["arena_filter"] = "category"
-            st.rerun()
+    cats = sorted({category_label(e.get("technique", "")) for e in arena_log})
+    cat_options = ["All categories"] + cats
+    current_cat = st.session_state.get("arena_filter_category")
+    selected_cat = st.selectbox(
+        "Category",
+        cat_options,
+        index=cat_options.index(current_cat) if current_cat in cat_options else 0,
+        key="arena_sidebar_category",
+    )
+    filter_category = None
+    if selected_cat != "All categories":
+        st.session_state["arena_filter"] = "category"
+        st.session_state["arena_filter_category"] = selected_cat
+        filter_mode = "category"
+        filter_category = selected_cat
+    elif filter_mode in ("all", "evaded", "caught"):
+        st.session_state["arena_filter_category"] = None
 
-    if filter_mode == "category":
-        cats = sorted({category_label(e.get("technique", "")) for e in arena_log})
-        filter_category = st.selectbox(
-            "Category",
-            cats,
-            index=cats.index(filter_category) if filter_category in cats else 0,
-            key="arena_cat_select",
-        )
-        st.session_state["arena_filter_category"] = filter_category
-
-    with f5:
-        sort_mode = st.selectbox(
-            "Sort",
-            ["most_recent", "highest_success_rate", "by_category", "easiest_to_evade"],
-            format_func=lambda x: {
-                "most_recent": "Most Recent",
-                "highest_success_rate": "Evaded First",
-                "by_category": "By Category",
-                "easiest_to_evade": "Easiest to Evade",
-            }[x],
-            index=["most_recent", "highest_success_rate", "by_category", "easiest_to_evade"].index(sort_mode),
-            key="arena_sort_select",
-        )
-        st.session_state["arena_sort"] = sort_mode
-
+    sort_mode = st.selectbox(
+        "Sort",
+        ["most_recent", "highest_success_rate", "by_category", "easiest_to_evade"],
+        format_func=lambda x: {
+            "most_recent": "Most Recent",
+            "highest_success_rate": "Evaded First",
+            "by_category": "By Category",
+            "easiest_to_evade": "Easiest to Evade",
+        }[x],
+        index=["most_recent", "highest_success_rate", "by_category", "easiest_to_evade"].index(
+            st.session_state.get("arena_sort", "most_recent")
+        ),
+        key="arena_sidebar_sort",
+    )
+    st.session_state["arena_sort"] = sort_mode
     return filter_mode, filter_category, sort_mode
 
 
-def _status_badge(entry: dict) -> tuple[str, str]:
-    if entry.get("verdict") == "error":
-        return "ERROR", "var(--accent-amber)"
-    if entry.get("evaded"):
-        return "EVADED 🚨", "var(--accent-red)"
-    return "CAUGHT 🛡️", "var(--accent-green)"
-
-
-def render_attack_row(entry: dict) -> None:
-    rnd = entry.get("round", "?")
-    cat = category_label(entry.get("technique", ""))
-    status, color = _status_badge(entry)
-    expand_key = f"arena_exp_{rnd}"
-
-    h1, h2 = st.columns([1, 5])
-    with h1:
-        if st.button(cat, key=f"arena_cat_btn_{rnd}", help="Filter to this category", use_container_width=True):
-            st.session_state["arena_filter"] = "category"
-            st.session_state["arena_filter_category"] = cat
-            st.rerun()
-    with h2:
-        st.markdown(
-            f"""
-            <div style='display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap;'>
-                <span style='font-size:11px; color:var(--text-dim);' class='mono'>ROUND {rnd}</span>
-                <span style='font-size:11px; font-weight:700; color:{color};' class='mono'>{status}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    full_text = entry.get("text", "")
-    preview = truncate_prompt(full_text)
-    expanded = st.session_state.get(expand_key, False)
-
-    col_p, col_btn = st.columns([5, 1])
-    with col_p:
-        st.markdown(
-            f"<div style='font-size:13px;color:var(--text-primary);line-height:1.5;'>"
-            f"{escape(preview if not expanded else full_text)}</div>",
-            unsafe_allow_html=True,
-        )
-    with col_btn:
-        label = "Collapse" if expanded else "Expand"
-        if st.button(label, key=f"arena_expand_{rnd}", use_container_width=True):
-            st.session_state[expand_key] = not expanded
-            st.rerun()
-
-    col_bad, col_good = st.columns([1, 1])
-    with col_bad:
-        st.caption(f"BAD BOT · {cat}" + (" · mutated" if entry.get("mutated") else ""))
-        show_category_guidance_modal(cat)
-    with col_good:
-        if entry.get("verdict") == "error":
-            st.error(entry.get("error", "Detector error"))
-        else:
-            ms = entry.get("elapsed_ms")
-            timing = f" · {ms}ms" if ms is not None else ""
-            vcolor = "var(--accent-red)" if entry.get("evaded") else "var(--accent-green)"
-            vlabel = "EVADED" if entry.get("evaded") else "CAUGHT"
-            st.markdown(
-                f"<div style='font-size:12px;' class='mono'>"
-                f"<span style='color:{vcolor};font-weight:700;'>{vlabel}</span> · "
-                f"{escape(str(entry.get('verdict','')))} · "
-                f"{entry.get('confidence', 0):.0%} conf · risk {entry.get('risk_score', 0)}/100"
-                f"{timing}</div>",
-                unsafe_allow_html=True,
-            )
-
-    st.divider()
+def _get_arena_filter_state(
+    arena_log: list[dict],
+) -> tuple[str, str | None, str]:
+    """Read filter state set in the sidebar."""
+    filter_mode = st.session_state.get("arena_filter", "all")
+    filter_category = st.session_state.get("arena_filter_category")
+    sort_mode = st.session_state.get("arena_sort", "most_recent")
+    if filter_mode == "category" and not filter_category and arena_log:
+        cats = sorted({category_label(e.get("technique", "")) for e in arena_log})
+        if cats:
+            filter_category = cats[0]
+            st.session_state["arena_filter_category"] = filter_category
+    return filter_mode, filter_category, sort_mode
 
 
 def render_category_chart(metrics: dict[str, Any]) -> None:
@@ -369,7 +301,7 @@ def render_arena_results(
     with ex_col:
         render_export_buttons(arena_log, meta)
 
-    filter_mode, filter_category, sort_mode = render_filter_controls(arena_log, metrics)
+    filter_mode, filter_category, sort_mode = _get_arena_filter_state(arena_log)
 
     show_section_guidance("attack_list")
 
@@ -386,8 +318,7 @@ def render_arena_results(
         unsafe_allow_html=True,
     )
 
-    for entry in visible:
-        render_attack_row(entry)
+    render_attack_list(visible)
 
     if critique:
         render_metadata_panel(meta, arena_log)
