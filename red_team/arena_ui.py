@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
-import io
 import json
 from datetime import datetime
 from html import escape
@@ -60,6 +58,11 @@ def arena_metrics(arena_log: list[dict]) -> dict[str, Any]:
     }
 
 
+@st.cache_data(show_spinner=False)
+def cached_arena_metrics(log_json: str) -> dict[str, Any]:
+    return arena_metrics(json.loads(log_json))
+
+
 def filter_sort_log(
     arena_log: list[dict],
     filter_mode: str,
@@ -91,41 +94,6 @@ def filter_sort_log(
     return rows
 
 
-def find_compare_pair(arena_log: list[dict], evaded_entry: dict) -> dict | None:
-    cat = category_label(evaded_entry.get("technique", ""))
-    caught_same = [
-        r for r in arena_log
-        if not r.get("evaded") and category_label(r.get("technique", "")) == cat
-    ]
-    if caught_same:
-        return caught_same[0]
-    caught_any = [r for r in arena_log if not r.get("evaded")]
-    return caught_any[0] if caught_any else None
-
-
-def _diff_html(left: str, right: str) -> tuple[str, str]:
-    """Simple word-level diff for two prompts."""
-    left_words = (left or "").split()
-    right_words = (right or "").split()
-    matcher = difflib.SequenceMatcher(None, left_words, right_words)
-    left_out: list[str] = []
-    right_out: list[str] = []
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        lw = " ".join(escape(w) for w in left_words[i1:i2])
-        rw = " ".join(escape(w) for w in right_words[j1:j2])
-        if tag == "equal":
-            left_out.append(lw)
-            right_out.append(rw)
-        elif tag in ("replace", "delete"):
-            if lw:
-                left_out.append(f"<mark style='background:rgba(255,77,77,0.35);'>{lw}</mark>")
-            if rw:
-                right_out.append(f"<mark style='background:rgba(61,220,132,0.35);'>{rw}</mark>")
-        elif tag == "insert" and rw:
-            right_out.append(f"<mark style='background:rgba(61,220,132,0.35);'>{rw}</mark>")
-    return " ".join(left_out), " ".join(right_out)
-
-
 def export_arena_json(arena_log: list[dict], meta: dict | None) -> str:
     payload = {
         "exported_at": datetime.now().isoformat(),
@@ -153,10 +121,10 @@ def export_arena_csv(arena_log: list[dict]) -> str:
     return pd.DataFrame(rows).to_csv(index=False)
 
 
-def render_metrics_bar(arena_log: list[dict]) -> None:
-    if not arena_log:
+def render_metrics_bar(arena_log: list[dict], metrics: dict[str, Any] | None = None) -> None:
+    if not arena_log and not metrics:
         return
-    m = arena_metrics(arena_log)
+    m = metrics or cached_arena_metrics(json.dumps(arena_log, sort_keys=True))
     top_cat_text = (
         " · ".join(f"{cat}: {rate}%" for cat, rate in m["top_cats"])
         if m["top_cats"]
@@ -185,8 +153,11 @@ def render_metrics_bar(arena_log: list[dict]) -> None:
         )
 
 
-def render_filter_controls(arena_log: list[dict]) -> tuple[str, str | None, str]:
-    m = arena_metrics(arena_log)
+def render_filter_controls(
+    arena_log: list[dict],
+    metrics: dict[str, Any] | None = None,
+) -> tuple[str, str | None, str]:
+    m = metrics or cached_arena_metrics(json.dumps(arena_log, sort_keys=True))
     evaded_n = m["evaded"]
     caught_n = m["caught"]
     total_n = m["total"]
@@ -253,7 +224,7 @@ def _status_badge(entry: dict) -> tuple[str, str]:
     return "CAUGHT 🛡️", "var(--accent-green)"
 
 
-def render_attack_row(entry: dict, arena_log: list[dict]) -> None:
+def render_attack_row(entry: dict) -> None:
     rnd = entry.get("round", "?")
     cat = category_label(entry.get("technique", ""))
     status, color = _status_badge(entry)
@@ -313,66 +284,20 @@ def render_attack_row(entry: dict, arena_log: list[dict]) -> None:
                 unsafe_allow_html=True,
             )
 
-    if entry.get("evaded"):
-        if st.button("Compare", key=f"arena_compare_{rnd}"):
-            st.session_state["arena_compare_round"] = rnd
-
-    compare_round = st.session_state.get("arena_compare_round")
-    if compare_round == rnd and entry.get("evaded"):
-        caught = find_compare_pair(arena_log, entry)
-        if caught:
-            left_html, right_html = _diff_html(caught.get("text", ""), entry.get("text", ""))
-            st.markdown("**Comparative analysis** — caught vs evaded variant")
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                st.markdown("##### Caught")
-                st.markdown(
-                    f"<div style='font-size:12px;line-height:1.6;background:var(--bg-panel);"
-                    f"padding:12px;border-radius:8px;border:1px solid var(--accent-green)40;'>"
-                    f"{left_html}</div>",
-                    unsafe_allow_html=True,
-                )
-                st.caption(
-                    f"Verdict: {caught.get('verdict')} · risk {caught.get('risk_score')}/100"
-                )
-            with cc2:
-                st.markdown("##### Evaded")
-                st.markdown(
-                    f"<div style='font-size:12px;line-height:1.6;background:var(--bg-panel);"
-                    f"padding:12px;border-radius:8px;border:1px solid var(--accent-red)40;'>"
-                    f"{right_html}</div>",
-                    unsafe_allow_html=True,
-                )
-                st.caption(
-                    f"Verdict: {entry.get('verdict')} · risk {entry.get('risk_score')}/100"
-                )
-        else:
-            st.info("No caught attack in this run to compare against.")
-
     st.divider()
 
 
-def render_category_chart(arena_log: list[dict]) -> None:
-    m = arena_metrics(arena_log)
-    if not m["by_cat"]:
+def render_category_chart(metrics: dict[str, Any]) -> None:
+    by_cat = metrics.get("by_cat") or {}
+    if not by_cat:
         return
     rows = []
-    for cat, d in m["by_cat"].items():
+    for cat, d in by_cat.items():
         rate = int(d["evaded"] / max(d["total"], 1) * 100)
         rows.append({"category": cat, "evasion_rate": rate})
     df = pd.DataFrame(rows).sort_values("evasion_rate", ascending=False)
     st.markdown("##### Detector Blindspots by Attack Category")
     st.bar_chart(df.set_index("category")[["evasion_rate"]], height=280)
-
-
-def render_trend_chart(run_history: list[dict]) -> None:
-    if len(run_history) < 2:
-        return
-    df = pd.DataFrame(run_history)
-    df["evasion_pct"] = (df["evasion_rate"] * 100).round(1)
-    df["run_label"] = range(1, len(df) + 1)
-    st.markdown("##### Detector Performance Over Time")
-    st.line_chart(df.set_index("run_label")[["evasion_pct"]], height=240)
 
 
 def render_metadata_panel(meta: dict | None, arena_log: list[dict]) -> None:
@@ -425,21 +350,31 @@ def render_arena_results(
     critique: str | None,
     *,
     show_metrics: bool = True,
+    test_run_id: int | None = None,
+    cached_metrics: dict[str, Any] | None = None,
 ) -> None:
     """Full arena results panel: filters, list, charts, debrief."""
     if not arena_log:
         return
 
+    metrics = cached_metrics or cached_arena_metrics(json.dumps(arena_log, sort_keys=True))
+
     if show_metrics:
-        render_metrics_bar(arena_log)
+        render_metrics_bar(arena_log, metrics)
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     ex_col, _ = st.columns([2, 3])
     with ex_col:
         render_export_buttons(arena_log, meta)
 
-    filter_mode, filter_category, sort_mode = render_filter_controls(arena_log)
-    visible = filter_sort_log(arena_log, filter_mode, filter_category, sort_mode)
+    filter_mode, filter_category, sort_mode = render_filter_controls(arena_log, metrics)
+
+    if test_run_id:
+        from arena_db import query_attacks
+
+        visible = query_attacks(test_run_id, filter_mode, filter_category, sort_mode)
+    else:
+        visible = filter_sort_log(arena_log, filter_mode, filter_category, sort_mode)
 
     st.markdown(
         f"<div style='font-size:12px;color:var(--text-dim);margin:8px 0 12px;' "
@@ -448,13 +383,11 @@ def render_arena_results(
     )
 
     for entry in visible:
-        render_attack_row(entry, arena_log)
+        render_attack_row(entry)
 
     if critique:
         render_metadata_panel(meta, arena_log)
-        render_category_chart(arena_log)
-        run_history = st.session_state.get("arena_run_history") or []
-        render_trend_chart(run_history)
+        render_category_chart(metrics)
 
         st.markdown(
             """
@@ -469,7 +402,6 @@ def render_arena_results(
         )
         st.markdown(critique)
 
-        m = arena_metrics(arena_log)
         st.markdown(
             f"""
             <div style='text-align:center; margin-top:20px; padding:20px;
@@ -477,10 +409,10 @@ def render_arena_results(
                         border:1px solid var(--border-hairline);'>
                 <div style='font-size:11px; color:var(--text-dim);' class='mono'>FINAL SCORE</div>
                 <div style='font-size:48px; font-weight:700;' class='mono'>
-                    GOOD BOT {m['caught']} — {m['evaded']} BAD BOT
+                    GOOD BOT {metrics['caught']} — {metrics['evaded']} BAD BOT
                 </div>
                 <div style='font-size:13px; color:var(--text-dim);'>
-                    {m['evasion_rate']}% evasion rate this match
+                    {metrics['evasion_rate']}% evasion rate this match
                 </div>
             </div>
             """,

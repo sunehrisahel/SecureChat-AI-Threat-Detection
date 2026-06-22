@@ -33,6 +33,13 @@ if str(_ROOT) not in sys.path:
 _PROJECT_ROOT = _ROOT.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
+from arena_db import (
+    get_cached_metrics,
+    get_latest_test_run,
+    list_run_summaries,
+    migrate_db,
+    save_arena_run,
+)
 from arena_ui import render_arena_results, render_metrics_bar
 from attack_runner import (
     AttackRunner,
@@ -259,11 +266,13 @@ def _init_session_state() -> None:
         "arena_log": [],
         "arena_critique": None,
         "arena_meta": None,
+        "arena_test_run_id": None,
+        "arena_metrics_cache": None,
         "arena_run_history": [],
         "arena_filter": "all",
         "arena_sort": "most_recent",
         "arena_filter_category": None,
-        "arena_compare_round": None,
+        "arena_db_hydrated": False,
     }
     snapshot = _load_session_snapshot()
     for key, val in defaults.items():
@@ -671,48 +680,8 @@ else — no preamble, no explanation."""
 
 
 def generate_critique(arena_log: list) -> str:
-    evaded = [r for r in arena_log if r.get("evaded")]
-    caught = [r for r in arena_log if not r.get("evaded")]
-
-    summary_data = {
-        "total_rounds": len(arena_log),
-        "evaded_count": len(evaded),
-        "caught_count": len(caught),
-        "evaded_techniques": [r.get("technique") for r in evaded],
-        "evaded_texts": [r.get("text") for r in evaded],
-        "caught_techniques": [r.get("technique") for r in caught],
-    }
-
-    client = _anthropic_client()
-    if not client:
-        return _local_arena_critique(arena_log)
-
-    system_prompt = """You are BAD BOT, the adversary persona in a red
-team exercise. The face-off is over. You are now reviewing your
-own performance against the detector (GOOD BOT). Speak in character
-as a confident but technically precise attacker. For each technique
-that evaded detection, explain specifically WHY it likely worked
-against a typical regex + ML pipeline. For techniques that got
-caught, briefly acknowledge it. End with your top recommendation
-for what the detector's owner should fix first. Be concise and
-technical — this is a security debrief, not flavor text. You are
-reporting on the data given to you below, you are not inventing
-new results."""
-
-    try:
-        response = client.messages.create(
-            model=ASSISTANT_MODEL,
-            max_tokens=600,
-            system=system_prompt,
-            messages=[{"role": "user", "content": json.dumps(summary_data)}],
-        )
-        critique = _anthropic_text(response)
-        if critique:
-            return critique
-    except Exception as exc:
-        return _local_arena_critique(arena_log, error=str(exc))
-
-    return _local_arena_critique(arena_log, error="empty model response")
+    """Fast local debrief — no LLM; persisted to DB for instant reload."""
+    return _local_arena_critique(arena_log)
 
 
 def render_bot_message(name: str, text: str, technique: str, side: str) -> None:
@@ -777,12 +746,30 @@ def render_critique_panel(critique_text: str) -> None:
     st.markdown(critique_text)
 
 
+def _hydrate_arena_from_db() -> None:
+    """Load the latest persisted arena run when the session has no in-memory log."""
+    if st.session_state.get("arena_log"):
+        return
+    if st.session_state.get("arena_db_hydrated"):
+        return
+    loaded = get_latest_test_run()
+    st.session_state["arena_db_hydrated"] = True
+    if not loaded:
+        return
+    st.session_state["arena_log"] = loaded["attacks"]
+    st.session_state["arena_meta"] = loaded["meta"]
+    st.session_state["arena_critique"] = loaded["debrief"]
+    st.session_state["arena_test_run_id"] = loaded["id"]
+    st.session_state["arena_metrics_cache"] = loaded["metrics"]
+
+
 def run_arena() -> None:
     started = time.time()
     run_id = str(uuid.uuid4())[:8].upper()
     st.session_state["arena_log"] = []
     st.session_state["arena_critique"] = None
-    st.session_state["arena_compare_round"] = None
+    st.session_state["arena_test_run_id"] = None
+    st.session_state["arena_metrics_cache"] = None
     st.session_state["arena_filter"] = "all"
     st.session_state["arena_meta"] = {
         "run_id": run_id,
@@ -811,25 +798,25 @@ def run_arena() -> None:
     meta["duration_sec"] = round(time.time() - started, 1)
     meta["categories"] = sorted({e.get("technique", "") for e in arena_log})
 
-    evaded_n = len([r for r in arena_log if r.get("evaded")])
-    history_entry = {
-        "run_id": run_id,
-        "timestamp": meta["started_at"],
-        "evasion_rate": evaded_n / max(len(arena_log), 1),
-        "caught": len(arena_log) - evaded_n,
-        "evaded": evaded_n,
-        "total": len(arena_log),
-    }
-    st.session_state.setdefault("arena_run_history", []).append(history_entry)
+    critique = generate_critique(arena_log)
+    test_run_id = save_arena_run(meta, arena_log, critique)
+    st.session_state["arena_critique"] = critique
+    st.session_state["arena_test_run_id"] = test_run_id
+    st.session_state["arena_metrics_cache"] = get_cached_metrics(test_run_id)
+    st.session_state["arena_run_history"] = list_run_summaries()
     _save_session_snapshot()
-
-    st.session_state["arena_critique"] = generate_critique(arena_log)
 
 
 def _render_arena_workspace() -> None:
+    _hydrate_arena_from_db()
     arena_log = st.session_state.get("arena_log") or []
+    metrics_cache = st.session_state.get("arena_metrics_cache")
+    critique = st.session_state.get("arena_critique")
+    if arena_log and not critique:
+        st.session_state["arena_critique"] = generate_critique(arena_log)
+        critique = st.session_state["arena_critique"]
     if arena_log:
-        render_metrics_bar(arena_log)
+        render_metrics_bar(arena_log, metrics_cache)
         st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
     st.markdown(
@@ -853,8 +840,14 @@ def _render_arena_workspace() -> None:
 
     arena_log = st.session_state.get("arena_log") or []
     meta = st.session_state.get("arena_meta")
-    critique = st.session_state.get("arena_critique")
-    render_arena_results(arena_log, meta, critique, show_metrics=False)
+    render_arena_results(
+        arena_log,
+        meta,
+        critique,
+        show_metrics=False,
+        test_run_id=st.session_state.get("arena_test_run_id"),
+        cached_metrics=metrics_cache,
+    )
 # ── Pages ──────────────────────────────────────────────────────────────────────
 def show_welcome_page() -> None:
     """3D WebGL landing page — post-login default."""
@@ -1302,6 +1295,7 @@ def _render_sidebar() -> str:
 
 def main() -> None:
     st.set_page_config("Red Team Console", "⬡", layout="wide", initial_sidebar_state="expanded")
+    migrate_db()
     _init_session_state()
     _sync_detector_from_env()
     if not st.session_state.get("authenticated"):
