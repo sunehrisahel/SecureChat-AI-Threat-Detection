@@ -245,7 +245,7 @@ def get_cached_metrics(test_run_id: int) -> dict[str, Any] | None:
         "evaded": row["evaded_count"],
         "caught": row["caught_count"],
         "evasion_rate": int(row["evasion_rate"]),
-        "rounds_completed": f"{row['total_attacks']}/10",
+        "rounds_completed": f"{row['total_attacks']}/{row['total_attacks']}",
         "avg_ms": int(row["avg_detection_time"]),
         "top_cats": cat_rates[:3],
         "by_cat": by_cat,
@@ -288,6 +288,14 @@ def get_latest_test_run() -> dict[str, Any] | None:
         row = conn.execute(
             "SELECT id FROM test_runs ORDER BY created_at DESC LIMIT 1"
         ).fetchone()
+    if not row:
+        return None
+    return load_test_run(int(row["id"]))
+
+
+def load_test_run_by_run_id(run_id: str) -> dict[str, Any] | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT id FROM test_runs WHERE run_id = ?", (run_id,)).fetchone()
     if not row:
         return None
     return load_test_run(int(row["id"]))
