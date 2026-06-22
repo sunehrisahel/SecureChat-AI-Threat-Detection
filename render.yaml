@@ -8,8 +8,8 @@ services:
     plan: free
     branch: main
     rootDir: prompt-injection-detector
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install fastapi uvicorn scikit-learn pandas pydantic python-multipart requests python-dotenv
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
