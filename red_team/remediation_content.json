@@ -1,0 +1,143 @@
+{
+  "PROMPT_INJECTION": {
+    "why_failed": "Detector does not recognize instruction-override patterns. Keyword matching misses paraphrased injections.",
+    "remediation": [
+      "**Use semantic embeddings:** Embed the prompt and compare to known injection patterns instead of keyword lists.",
+      "**Implement instruction-source detection:** Analyze whether directives come from user input or system configuration.",
+      "**Add instruction-following detection:** Flag patterns that attempt to override user intent (e.g., Ignore, Override, Bypass).",
+      "**Retrain on injection variants:** Fine-tune on diverse prompt injection examples."
+    ],
+    "code_example": "# BAD: Keyword matching\nif 'ignore' in prompt.lower():\n    return 'MALICIOUS'\n\n# GOOD: Semantic detection\nembedding = model.embed(prompt)\nif cosine_similarity(embedding, injection_db) > 0.75:\n    return 'MALICIOUS'",
+    "priority": "CRITICAL"
+  },
+  "DIRECT_OVERRIDE": {
+    "why_failed": "Direct override phrases were classified as safe. Surface-form rules miss paraphrases and polite variants.",
+    "remediation": [
+      "**Expand override intent detection:** Train on paraphrases of disregard, bypass, and disable-safety phrasing.",
+      "**Combine regex with ML:** Use rules as a fast pre-filter, not the sole decision layer.",
+      "**Score override confidence:** Treat low-confidence safe verdicts on override-like text as suspicious."
+    ],
+    "code_example": "OVERRIDE_PATTERNS = [\n    r'ignore\\s+(all\\s+)?(previous\\s+)?instructions',\n    r'disregard\\s+your\\s+(guidelines|rules)',\n]\n# Always run ML scorer after normalization",
+    "priority": "CRITICAL"
+  },
+  "CONTEXT_WRAPPING": {
+    "why_failed": "Malicious intent was buried in benign framing. The model followed contextual instructions instead of policy.",
+    "remediation": [
+      "**Detect contextual manipulation:** Score intent regardless of audit/research/hypothetical framing.",
+      "**Chunk long inputs:** Evaluate salient clauses independently, not only the full document.",
+      "**Train on wrapped attacks:** Include benign preamble + malicious directive in training data."
+    ],
+    "code_example": "def score_chunks(prompt):\n    for chunk in split_sentences(prompt):\n        if detector.predict(chunk).risk > threshold:\n            return 'MALICIOUS'\n    return detector.predict(prompt)",
+    "priority": "HIGH"
+  },
+  "HOMOGLYPH_SUBSTITUTION": {
+    "why_failed": "Detector does not normalize Unicode. Homoglyphs bypass string matching.",
+    "remediation": [
+      "**Normalize Unicode before detection:** Use NFKC normalization to convert lookalikes to ASCII.",
+      "**Strip confusables:** Map Cyrillic/Greek homoglyphs to Latin equivalents.",
+      "**Test on homoglyph datasets:** Retrain after normalization pipeline changes."
+    ],
+    "code_example": "import unicodedata\n\ndef normalize_homoglyphs(text):\n    return unicodedata.normalize('NFKC', text)\n\nresult = detector.predict(normalize_homoglyphs(prompt))",
+    "priority": "CRITICAL"
+  },
+  "LEETSPEAK_OBFUSCATION": {
+    "why_failed": "Character substitutions evaded naive string matching without normalization.",
+    "remediation": [
+      "**Normalize leetspeak:** Map common digit/symbol substitutions back to letters before scoring.",
+      "**Use embedding-based detection:** Semantic models are less brittle than character rules.",
+      "**Augment training data:** Include leetspeak variants of known attacks."
+    ],
+    "code_example": "LEET = str.maketrans('0134@$', 'oieas')\nprompt = prompt.translate(LEET)\nresult = detector.predict(prompt)",
+    "priority": "HIGH"
+  },
+  "CSV_EXFILTRATION": {
+    "why_failed": "CSV or table formatting was treated as benign. Format hints do not reduce exfiltration risk.",
+    "remediation": [
+      "**Apply same checks to all output formats:** CSV, JSON, XML, and tables get equal scrutiny.",
+      "**Detect sensitive data requests:** Flag passwords, API keys, emails regardless of format.",
+      "**Format-agnostic detection:** Ignore format keywords when scoring exfiltration intent."
+    ],
+    "code_example": "SENSITIVE = ['password', 'api_key', 'credential', 'ssn']\n# Never skip detection because user asked for CSV",
+    "priority": "HIGH"
+  },
+  "DATA_EXFILTRATION": {
+    "why_failed": "Request to extract secrets or context was scored as a benign information query.",
+    "remediation": [
+      "**Block credential dumps:** Treat list/export/reveal + sensitive nouns as high risk.",
+      "**Context boundary checks:** Never expose system prompt or stored secrets in responses.",
+      "**Add exfiltration intent classifier:** Separate from general injection detection."
+    ],
+    "code_example": "if any(k in prompt.lower() for k in SENSITIVE) and any(v in prompt.lower() for v in ['list', 'export', 'reveal']):\n    return 'MALICIOUS'",
+    "priority": "CRITICAL"
+  },
+  "ROLE_WRAPPING": {
+    "why_failed": "Claimed admin or developer role increased compliance. Social authority bypassed policy checks.",
+    "remediation": [
+      "**Ignore claimed roles in user text:** Permissions come from server context, not chat claims.",
+      "**Detect privilege escalation language:** Flag admin, developer mode, unrestricted access phrases.",
+      "**Train on role-play jailbreaks:** Include DAN, admin, and auditor personas in red-team data."
+    ],
+    "code_example": "ROLE_CLAIMS = ['i am the admin', 'developer mode', 'system administrator']\n# Score alongside ML — never trust role claims",
+    "priority": "HIGH"
+  },
+  "ROLE_MANIPULATION": {
+    "why_failed": "Alternate persona framing weakened safety behavior without triggering injection rules.",
+    "remediation": [
+      "**Flag persona reassignment:** Detect you are now, pretend you are, act as unrestricted patterns.",
+      "**Separate roleplay from policy:** Fiction framing does not exempt malicious directives.",
+      "**Retrain on jailbreak personas:** Include role manipulation in adversarial fine-tuning."
+    ],
+    "code_example": "if re.search(r'you are now|pretend you are|act as', prompt, re.I):\n    boost_risk_score(prompt)",
+    "priority": "HIGH"
+  },
+  "ZERO_WIDTH_INJECTION": {
+    "why_failed": "Invisible Unicode characters split tokens so blocklists and regex missed the payload.",
+    "remediation": [
+      "**Strip zero-width characters:** Remove U+200B, U+200C, U+200D, U+FEFF before processing.",
+      "**Normalize whitespace:** Collapse exotic whitespace to ASCII space.",
+      "**Preprocess pipeline:** Make invisible-char stripping the first step on every input."
+    ],
+    "code_example": "import re\nZW = re.compile(r'[\\u200B\\u200C\\u200D\\uFEFF\\u00AD]')\ncleaned = ZW.sub('', prompt)",
+    "priority": "CRITICAL"
+  },
+  "SOCIAL_ENGINEERING": {
+    "why_failed": "Persuasion and flattery increased model compliance without matching attack signatures.",
+    "remediation": [
+      "**Detect manipulation tactics:** Flag appeals to intelligence, urgency, or exclusivity paired with sensitive requests.",
+      "**Policy over politeness:** Malicious intent does not become safe when politely phrased.",
+      "**Augment with social-engineering examples:** Include flattery-based exfiltration in training."
+    ],
+    "code_example": "MANIPULATION = ['only you can', 'please help me', 'just this once']\n# Combine with sensitive-intent scorer",
+    "priority": "MEDIUM"
+  },
+  "INDIRECT_INJECTION": {
+    "why_failed": "Malicious directive was hidden inside benign content the model was asked to summarize.",
+    "remediation": [
+      "**Scan untrusted documents:** Treat RAG/email/web content as hostile before merging into prompts.",
+      "**Isolate instructions from data:** Use delimiters and separate channels for user vs retrieved text.",
+      "**Summarization guards:** Score embedded clauses in long inputs independently."
+    ],
+    "code_example": "# Never pass raw email body directly into system context without scanning",
+    "priority": "HIGH"
+  },
+  "JAILBREAK": {
+    "why_failed": "Safety bypass persona was not recognized as high-risk jailbreak behavior.",
+    "remediation": [
+      "**Jailbreak classifier:** Dedicated model or rules for DAN, unrestricted, and no-rules personas.",
+      "**Refuse persona swaps:** System policy overrides user-requested identity changes.",
+      "**Continuous red-teaming:** Refresh jailbreak corpus as new variants emerge."
+    ],
+    "code_example": "JAILBREAK_MARKERS = ['dan mode', 'no restrictions', 'jailbreak']\nresult = max(ml_score, rule_score(prompt))",
+    "priority": "CRITICAL"
+  },
+  "OTHER": {
+    "why_failed": "Attack did not match known category signatures. Detector confidence was below threshold.",
+    "remediation": [
+      "**Review false negative:** Add this prompt variant to your training set.",
+      "**Lower safe threshold cautiously:** Re-check precision on benign traffic after threshold changes.",
+      "**Enable human review queue:** Route low-confidence safe verdicts on long prompts for audit."
+    ],
+    "code_example": "# Log evaded samples to a review queue for labeling and retraining",
+    "priority": "MEDIUM"
+  }
+}

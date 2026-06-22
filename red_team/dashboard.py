@@ -40,7 +40,9 @@ from arena_db import (
     migrate_db,
     save_arena_run,
 )
-from arena_ui import render_arena_results, render_arena_sidebar_filters, render_metrics_bar
+from arena_ui import arena_metrics
+from components.arena_fight import render_arena_fight
+from components.arena_results_detail import render_arena_results_detail
 from components.guidance_wizard import (
     show_attack_category_reference,
     show_category_guidance_modal,
@@ -125,6 +127,7 @@ NAV_HOME = "Home"
 NAV_CHAT = "Chat"
 NAV_ATTACK = "Attack Lab"
 NAV_ARENA = "Arena"
+NAV_ARENA_RESULTS = "Arena Results"
 NAV_RESULTS = "Results"
 NAV_HISTORY = "History"
 NAV_ITEMS = [NAV_HOME, NAV_CHAT, NAV_ATTACK, NAV_ARENA, NAV_RESULTS, NAV_HISTORY]
@@ -822,19 +825,15 @@ def _render_arena_workspace() -> None:
     if arena_log and not critique:
         st.session_state["arena_critique"] = generate_critique(arena_log)
         critique = st.session_state["arena_critique"]
-    if arena_log:
-        show_section_guidance("metrics_bar")
-        render_metrics_bar(arena_log, metrics_cache)
-        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
     st.markdown(
         """
         <div style='margin-bottom:20px;'>
             <div style='font-size:18px;font-weight:700;color:var(--text-primary);'>
-                🥊 Bad Bot vs Good Bot Arena
+                ⚔️ Bad Bot vs Good Bot Arena
             </div>
             <div style='font-size:13px;color:var(--text-dim);margin-top:4px;'>
-                BAD BOT generates attacks · GOOD BOT is your live detector (score_attack output only)
+                Live fight view — start a face-off, then open Arena Results for fixes
             </div>
         </div>
         """,
@@ -847,15 +846,17 @@ def _render_arena_workspace() -> None:
         st.rerun()
 
     arena_log = st.session_state.get("arena_log") or []
-    meta = st.session_state.get("arena_meta")
-    render_arena_results(
-        arena_log,
-        meta,
-        critique,
-        show_metrics=False,
-        test_run_id=st.session_state.get("arena_test_run_id"),
-        cached_metrics=metrics_cache,
-    )
+    if not arena_log:
+        st.info("No battle data yet. Click **Start 10-Round Face-Off** to begin.")
+        return
+
+    metrics = metrics_cache or arena_metrics(arena_log)
+    render_arena_fight(arena_log, metrics)
+
+    st.divider()
+    if st.button("📊 Go to Arena Results", type="primary", use_container_width=True, key="goto_arena_results"):
+        st.session_state["nav_page"] = NAV_ARENA_RESULTS
+        st.rerun()
 # ── Pages ──────────────────────────────────────────────────────────────────────
 def show_welcome_page() -> None:
     """3D WebGL landing page — post-login default."""
@@ -1166,6 +1167,22 @@ def show_arena_page() -> None:
     show_workspace_page()
 
 
+def show_arena_results_page() -> None:
+    _render_shell()
+    _hydrate_arena_from_db()
+    show_welcome_wizard()
+    critique = st.session_state.get("arena_critique")
+    if (st.session_state.get("arena_log") or []) and not critique:
+        st.session_state["arena_critique"] = generate_critique(st.session_state["arena_log"])
+        critique = st.session_state["arena_critique"]
+    render_arena_results_detail(
+        st.session_state.get("arena_log") or [],
+        st.session_state.get("arena_meta"),
+        critique=critique,
+        cached_metrics=st.session_state.get("arena_metrics_cache"),
+    )
+
+
 def show_results_page() -> None:
     _render_shell()
     results = st.session_state["live_results"]
@@ -1242,7 +1259,8 @@ def _render_sidebar() -> str:
             (NAV_CHAT, "💬", "Chat"),
             (NAV_ATTACK, "🎯", "Run Attacks"),
             (NAV_ARENA, "🥊", "Arena"),
-            (NAV_RESULTS, "📊", "Results"),
+            (NAV_ARENA_RESULTS, "📊", "Arena Results"),
+            (NAV_RESULTS, "📈", "Lab Results"),
             (NAV_HISTORY, "📋", "History"),
         ]
         current = st.session_state["nav_page"]
@@ -1261,6 +1279,8 @@ def _render_sidebar() -> str:
                     st.session_state["workspace_mode"] = "attack"
                 elif page_key == NAV_ARENA:
                     st.session_state["workspace_mode"] = "arena"
+                elif page_key == NAV_ARENA_RESULTS:
+                    pass
                 st.rerun()
 
         st.markdown(
@@ -1274,10 +1294,10 @@ def _render_sidebar() -> str:
         if current == NAV_ARENA:
             arena_log = st.session_state.get("arena_log") or []
             if arena_log:
-                render_arena_sidebar_filters(
-                    arena_log,
-                    st.session_state.get("arena_metrics_cache"),
-                )
+                st.markdown("##### ⚡ Quick Stats")
+                m = st.session_state.get("arena_metrics_cache") or arena_metrics(arena_log)
+                st.metric("Evasion Rate", f"{m['evasion_rate']}%")
+                st.caption(f"Good Bot {m['caught']} — Bad Bot {m['evaded']}")
                 st.markdown(
                     "<div style='height:1px; background:var(--border-hairline); margin:18px 0 18px 0;'></div>",
                     unsafe_allow_html=True,
@@ -1371,6 +1391,8 @@ def main() -> None:
         show_workspace_page()
     elif page == NAV_ARENA:
         show_arena_page()
+    elif page == NAV_ARENA_RESULTS:
+        show_arena_results_page()
     elif page == NAV_RESULTS:
         show_results_page()
     elif page == NAV_HISTORY:
