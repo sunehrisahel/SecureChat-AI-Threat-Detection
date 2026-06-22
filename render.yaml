@@ -3,7 +3,7 @@
 
 services:
   - type: web
-    name: prompt-injection-detector
+    name: securechat-detector-api
     runtime: python
     plan: free
     branch: main
@@ -36,7 +36,7 @@ services:
       - key: RED_TEAM_PASSWORD
         generateValue: true
       - key: DETECTOR_URL
-        value: https://prompt-injection-detector.onrender.com/analyze
+        value: https://securechat-detector-api.onrender.com/analyze
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: RED_TEAM_API_KEY

@@ -70,7 +70,7 @@ curl -X POST https://your-detector.vercel.app/analyze \
 | `ALLOWED_ORIGINS` | `https://your-chatbot.vercel.app` | Production |
 | `COOKIE_SECURE` | `true` | Production |
 
-**Note:** SecureChat on Vercel calls the detector on **Render** (`https://prompt-injection-detector.onrender.com/analyze`) by default. Deploy the Render blueprint first (Step 4). Override with `DETECTOR_URL` if needed.
+**Note:** SecureChat on Vercel calls the detector on **Render** (`https://securechat-detector-api.onrender.com/analyze`) by default. Deploy the Render blueprint first (Step 4). Override with `DETECTOR_URL` if needed.
 
 4. Click **Deploy**
 5. Open `https://your-chatbot.vercel.app`
@@ -196,8 +196,8 @@ Streamlit cannot run on Vercel serverless. Use [Render](https://render.com) with
 
 1. Push this repo to GitHub.
 2. Go to [render.com/deploy](https://render.com/deploy) → connect `SecureChat-AI-Threat-Detection`.
-3. Render detects `render.yaml` and creates both services.
+3. Render detects `render.yaml` and creates **securechat-detector-api** + **red-team-console**.
 4. Set **ANTHROPIC_API_KEY** on **red-team-console** (secret).
-5. Deploy → Red Team uses `https://prompt-injection-detector.onrender.com/analyze` automatically (API key synced from the detector service).
+5. Deploy → both services use `https://securechat-detector-api.onrender.com/analyze`.
 
 Session attack history persists on the Render disk via `.red_team_session.json` until redeploy.

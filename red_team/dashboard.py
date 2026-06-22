@@ -92,7 +92,7 @@ def _default_detector_url() -> str:
     if env_url:
         return normalize_detector_url(env_url)
     if os.getenv("RENDER"):
-        return normalize_detector_url("https://prompt-injection-detector.onrender.com/analyze")
+        return normalize_detector_url("https://securechat-detector-api.onrender.com/analyze")
     return normalize_detector_url(_LOCAL_DETECTOR_URL)
 
 

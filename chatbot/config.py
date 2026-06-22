@@ -11,7 +11,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 DETECTOR_URL = os.getenv("DETECTOR_URL", "").strip()
 if not DETECTOR_URL:
     if os.getenv("VERCEL"):
-        DETECTOR_URL = "https://prompt-injection-detector.onrender.com/analyze"
+        DETECTOR_URL = "https://securechat-detector-api.onrender.com/analyze"
     else:
         DETECTOR_URL = "http://localhost:8000/analyze"
 DETECTOR_TIMEOUT = int(os.getenv("DETECTOR_TIMEOUT", "10"))
