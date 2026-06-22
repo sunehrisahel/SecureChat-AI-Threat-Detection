@@ -192,7 +192,7 @@ If Vercel deploy fails due to bundle size or cold starts, [Render](https://rende
 
 ## Step 4 — Deploy the Red Team Console + detector API (Render)
 
-Streamlit cannot run on Vercel serverless. Use [Render](https://render.com) with the included `render.yaml` blueprint (creates **prompt-injection-detector** + **red-team-console**).
+Streamlit cannot run on Vercel serverless. Use [Render](https://render.com) with the included `render.yaml` blueprint (creates **securechat-detector-api** + **red-team-console**).
 
 1. Push this repo to GitHub.
 2. Go to [render.com/deploy](https://render.com/deploy) → connect `SecureChat-AI-Threat-Detection`.
