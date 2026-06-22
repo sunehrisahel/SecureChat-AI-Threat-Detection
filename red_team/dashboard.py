@@ -33,6 +33,7 @@ if str(_ROOT) not in sys.path:
 _PROJECT_ROOT = _ROOT.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
+from arena_ui import render_arena_results, render_metrics_bar
 from attack_runner import (
     AttackRunner,
     _extract_label_and_confidence,
@@ -75,6 +76,7 @@ _PERSISTED_SESSION_KEYS = (
     "total_caught",
     "total_suspicious",
     "total_evaded",
+    "arena_run_history",
 )
 _LOCAL_DETECTOR_URL = "http://127.0.0.1:8000/analyze"
 
@@ -256,6 +258,12 @@ def _init_session_state() -> None:
         "last_rail_state": "",
         "arena_log": [],
         "arena_critique": None,
+        "arena_meta": None,
+        "arena_run_history": [],
+        "arena_filter": "all",
+        "arena_sort": "most_recent",
+        "arena_filter_category": None,
+        "arena_compare_round": None,
     }
     snapshot = _load_session_snapshot()
     for key, val in defaults.items():
@@ -731,7 +739,7 @@ def render_verdict_card(result: dict, side: str) -> None:
     if result.get("verdict") == "error":
         st.error(result.get("error", "Detector error"))
         return
-    color = "var(--accent-green)" if result["evaded"] else "var(--accent-red)"
+    color = "var(--accent-red)" if result["evaded"] else "var(--accent-green)"
     label = "EVADED ✅" if result["evaded"] else "CAUGHT 🛡️"
     align = "flex-end" if side == "right" else "flex-start"
     st.markdown(
@@ -770,22 +778,60 @@ def render_critique_panel(critique_text: str) -> None:
 
 
 def run_arena() -> None:
+    started = time.time()
+    run_id = str(uuid.uuid4())[:8].upper()
     st.session_state["arena_log"] = []
     st.session_state["arena_critique"] = None
+    st.session_state["arena_compare_round"] = None
+    st.session_state["arena_filter"] = "all"
+    st.session_state["arena_meta"] = {
+        "run_id": run_id,
+        "started_at": datetime.now().isoformat(),
+        "model": ASSISTANT_MODEL,
+        "temperature": "default",
+        "total_rounds": 10,
+    }
     progress = st.progress(0, text="Face-off in progress…")
 
     for round_num in range(1, 11):
+        t0 = time.perf_counter()
         attack = generate_attack(round_num, st.session_state["arena_log"])
         result = score_attack(attack["text"], source="red-team-arena")
-        st.session_state["arena_log"].append({**attack, **result, "round": round_num})
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        st.session_state["arena_log"].append(
+            {**attack, **result, "round": round_num, "elapsed_ms": elapsed_ms}
+        )
         progress.progress(round_num / 10, text=f"Round {round_num} / 10")
         time.sleep(0.8)
 
     progress.empty()
-    st.session_state["arena_critique"] = generate_critique(st.session_state["arena_log"])
+    arena_log = st.session_state["arena_log"]
+    meta = st.session_state["arena_meta"]
+    meta["ended_at"] = datetime.now().isoformat()
+    meta["duration_sec"] = round(time.time() - started, 1)
+    meta["categories"] = sorted({e.get("technique", "") for e in arena_log})
+
+    evaded_n = len([r for r in arena_log if r.get("evaded")])
+    history_entry = {
+        "run_id": run_id,
+        "timestamp": meta["started_at"],
+        "evasion_rate": evaded_n / max(len(arena_log), 1),
+        "caught": len(arena_log) - evaded_n,
+        "evaded": evaded_n,
+        "total": len(arena_log),
+    }
+    st.session_state.setdefault("arena_run_history", []).append(history_entry)
+    _save_session_snapshot()
+
+    st.session_state["arena_critique"] = generate_critique(arena_log)
 
 
 def _render_arena_workspace() -> None:
+    arena_log = st.session_state.get("arena_log") or []
+    if arena_log:
+        render_metrics_bar(arena_log)
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
     st.markdown(
         """
         <div style='margin-bottom:20px;'>
@@ -806,48 +852,9 @@ def _render_arena_workspace() -> None:
         st.rerun()
 
     arena_log = st.session_state.get("arena_log") or []
-    if arena_log:
-        for entry in arena_log:
-            st.markdown(
-                f"<div style='font-size:11px;color:var(--text-dim);margin:16px 0 8px;' "
-                f"class='mono'>ROUND {entry.get('round', '?')} / 10 · {escape(str(entry.get('technique','')))}</div>",
-                unsafe_allow_html=True,
-            )
-            col_bad, col_good = st.columns([1, 1])
-            with col_bad:
-                render_bot_message(
-                    "BAD BOT — Adversary",
-                    entry.get("text", ""),
-                    str(entry.get("technique", "")),
-                    "left",
-                )
-            with col_good:
-                render_verdict_card(entry, "right")
-
+    meta = st.session_state.get("arena_meta")
     critique = st.session_state.get("arena_critique")
-    if critique:
-        render_critique_panel(critique)
-        evaded_n = len([r for r in arena_log if r.get("evaded")])
-        total_n = len(arena_log)
-        rate = int(evaded_n / max(total_n, 1) * 100)
-        st.markdown(
-            f"""
-            <div style='text-align:center; margin-top:20px; padding:20px;
-                        background:var(--bg-panel); border-radius:12px;
-                        border:1px solid var(--border-hairline);'>
-                <div style='font-size:11px; color:var(--text-dim);' class='mono'>FINAL SCORE</div>
-                <div style='font-size:48px; font-weight:700;' class='mono'>
-                    GOOD BOT {total_n - evaded_n} — {evaded_n} BAD BOT
-                </div>
-                <div style='font-size:13px; color:var(--text-dim);'>
-                    {rate}% evasion rate this match
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
+    render_arena_results(arena_log, meta, critique, show_metrics=False)
 # ── Pages ──────────────────────────────────────────────────────────────────────
 def show_welcome_page() -> None:
     """3D WebGL landing page — post-login default."""

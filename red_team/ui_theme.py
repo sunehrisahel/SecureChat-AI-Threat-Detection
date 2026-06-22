@@ -41,7 +41,25 @@ def inject_workspace_css() -> str:
         font-family: 'JetBrains Mono', monospace !important;
     }
 
-    #MainMenu, footer, header { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; }
+
+    /* Do NOT hide [data-testid="stHeader"] — that removes the sidebar toggle. */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Sidebar collapse control must stay visible */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarNav"] button {
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
 
     .block-container {
         padding: 0.75rem 1.5rem 1.5rem !important;
@@ -57,12 +75,26 @@ def inject_workspace_css() -> str:
     .status-rail.caught { background: var(--accent-red); }
     .status-rail.evaded { background: var(--accent-green); }
 
-    /* Sidebar */
+    /* Sidebar — force visible on desktop; collapsed state hides it via transform */
     [data-testid="stSidebar"] {
         background: var(--bg-panel) !important;
         border-right: 1px solid var(--border-hairline) !important;
         min-width: 240px !important;
         max-width: 240px !important;
+        transform: translateX(0) !important;
+        visibility: visible !important;
+        display: block !important;
+    }
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        transform: translateX(0) !important;
+        margin-left: 0 !important;
+    }
+    [data-testid="stSidebarBackdrop"] {
+        display: none !important;
+    }
+    /* Offset main content when sidebar is pinned open */
+    [data-testid="stAppViewContainer"] > section.main {
+        margin-left: 0 !important;
     }
     [data-testid="stSidebar"] > div { padding-top: 28px; }
 
