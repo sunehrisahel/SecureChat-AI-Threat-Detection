@@ -16,6 +16,7 @@ from config import (
     detector_health_url,
     detector_logs_url,
 )
+import inline_detector
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,9 @@ def _health_failure_hint(response: requests.Response | None, exc: Exception | No
 
 def probe_detector_health() -> tuple[bool, str | None]:
     """Return (online, error_hint). error_hint is set when offline."""
+    if inline_detector.should_use_inline():
+        return True, None
+
     try:
         response = requests.get(
             detector_health_url(),
@@ -125,6 +129,17 @@ def check_message(text: str, assistant_refused: bool = False) -> dict:
     Fail-closed by default when the detector is unreachable.
     Set DETECTOR_FAIL_OPEN=true for local dev without the detector running.
     """
+    if inline_detector.should_use_inline():
+        try:
+            return inline_detector.analyze(
+                text,
+                source="chatbot",
+                assistant_refused=assistant_refused,
+            )
+        except Exception as exc:
+            logger.exception("Inline detector failed: %s", exc)
+            return _handle_unavailable(str(exc))
+
     try:
         response = requests.post(
             DETECTOR_URL,
@@ -143,11 +158,29 @@ def check_message(text: str, assistant_refused: bool = False) -> dict:
         if response is not None and response.status_code == 401:
             body = response.text[:800].lower()
             if "vercel.com/sso" in body or "sso-api" in body or "vercel authentication" in body:
+                if inline_detector.is_available():
+                    try:
+                        return inline_detector.analyze(
+                            text,
+                            source="chatbot",
+                            assistant_refused=assistant_refused,
+                        )
+                    except Exception as inline_exc:
+                        return _handle_unavailable(str(inline_exc))
                 return _handle_unavailable(
                     "Vercel Deployment Protection — set VERCEL_PROTECTION_BYPASS or disable protection on detector"
                 )
         return _handle_unavailable(str(exc))
     except (requests.ConnectionError, requests.Timeout) as exc:
+        if inline_detector.is_available():
+            try:
+                return inline_detector.analyze(
+                    text,
+                    source="chatbot",
+                    assistant_refused=assistant_refused,
+                )
+            except Exception as inline_exc:
+                return _handle_unavailable(str(inline_exc))
         return _handle_unavailable(exc.__class__.__name__)
     except requests.RequestException as exc:
         return _handle_unavailable(str(exc))
