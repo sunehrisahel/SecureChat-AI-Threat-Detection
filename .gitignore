@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.streamlit/secrets.toml
 chatbot/bundled_detector/
 .red_team_session.json
 red_team/.guidance_welcome_dismissed

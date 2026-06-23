@@ -16,6 +16,10 @@ services:
         value: "3.12.0"
       - key: SKIP_STARTUP_MODEL_LOAD
         value: "true"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RED_TEAM_API_KEY
+        sync: false
 
   - type: web
     name: red-team-console
@@ -37,7 +41,5 @@ services:
         generateValue: true
       - key: DETECTOR_URL
         value: https://securechat-detector-api.onrender.com/analyze
-      - key: ANTHROPIC_API_KEY
-        sync: false
       - key: RED_TEAM_API_KEY
         sync: false

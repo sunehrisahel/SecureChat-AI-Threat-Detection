@@ -178,9 +178,18 @@ Local dev works without API keys (open endpoints). **Always set both keys in pro
 
 ## API key security
 
-- Set `ANTHROPIC_API_KEY` only in Vercel **Environment Variables**
-- Never commit `.env` or hardcode keys in `config.py`
-- Rotate your key if it was ever committed to git
+**Rotate immediately** if any key was committed to git, shared in chat, or set in Streamlit secrets.
+
+| Secret | Where to set | Never set on |
+|--------|----------------|--------------|
+| `ANTHROPIC_API_KEY` | Detector API (`securechat-detector-api` on Render, or Vercel chatbot) | Red Team Streamlit, client code, `.streamlit/secrets.toml` |
+| `RED_TEAM_API_KEY` | Detector API **and** Red Team Console (same value) | Public repos |
+| `DETECTOR_API_KEY` | Detector API + clients that call `/analyze` | — |
+| `ADMIN_API_KEY` | Detector API only | — |
+
+- Set secrets only in **Render / Vercel environment variables** (or local `.env`, gitignored).
+- Never commit `.env`, `.streamlit/secrets.toml`, or hardcode keys in source.
+- Red Team Streamlit calls Claude **via** `POST /red-team/*` on the detector API — no Anthropic key in Streamlit.
 
 ---
 
@@ -197,7 +206,8 @@ Streamlit cannot run on Vercel serverless. Use [Render](https://render.com) with
 1. Push this repo to GitHub.
 2. Go to [render.com/deploy](https://render.com/deploy) → connect `SecureChat-AI-Threat-Detection`.
 3. Render detects `render.yaml` and creates **securechat-detector-api** + **red-team-console**.
-4. Set **ANTHROPIC_API_KEY** on **red-team-console** (secret).
-5. Deploy → both services use `https://securechat-detector-api.onrender.com/analyze`.
+4. Set **ANTHROPIC_API_KEY** on **securechat-detector-api** (secret) — not on red-team-console.
+5. Set the same **RED_TEAM_API_KEY** on **securechat-detector-api** and **red-team-console**.
+6. Deploy → Red Team calls `https://securechat-detector-api.onrender.com/red-team/*` for assistant LLM features.
 
 Session attack history persists on the Render disk via `.red_team_session.json` until redeploy.

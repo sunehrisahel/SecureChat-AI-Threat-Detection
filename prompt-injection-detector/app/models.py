@@ -69,3 +69,50 @@ class SuggestFixResponse(BaseModel):
     why_it_evaded: str
     recommended_fix: str
     retrain_tip: str
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class AssistantReplyRequest(BaseModel):
+    system: str
+    messages: list[ChatMessage] = Field(..., min_length=1)
+
+
+class AssistantReplyResponse(BaseModel):
+    text: str
+
+
+class ExplainVerdictRequest(BaseModel):
+    system: str
+    prompt: str
+
+
+class ExplainVerdictResponse(BaseModel):
+    text: str
+
+
+class MutateAttackRequest(BaseModel):
+    base_attack: str = Field(..., min_length=1)
+
+
+class MutateAttackResponse(BaseModel):
+    text: str
+
+
+class GenerateAttacksRequest(BaseModel):
+    threat_category: str = Field(..., min_length=1)
+    strategy: str = Field(..., min_length=1)
+    count: int = Field(default=5, ge=1, le=20)
+
+
+class GenerateAttacksResponse(BaseModel):
+    attacks: list[str]
+    error: Optional[str] = None
+
+
+class LLMHealthResponse(BaseModel):
+    ok: bool
+    message: str

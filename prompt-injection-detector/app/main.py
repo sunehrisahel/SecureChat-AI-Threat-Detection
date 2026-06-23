@@ -22,7 +22,16 @@ from app.models import (
     AnalyticsResponse,
     AnalyzeRequest,
     AnalyzeResponse,
+    AssistantReplyRequest,
+    AssistantReplyResponse,
+    ExplainVerdictRequest,
+    ExplainVerdictResponse,
+    GenerateAttacksRequest,
+    GenerateAttacksResponse,
     HealthResponse,
+    LLMHealthResponse,
+    MutateAttackRequest,
+    MutateAttackResponse,
     SuggestFixRequest,
     SuggestFixResponse,
 )
@@ -35,6 +44,8 @@ from app.security import (
     require_red_team_key,
 )
 from app.suggest_fix import build_suggest_fix
+from app import llm_service
+from app.llm_service import LLMUnavailableError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -165,6 +176,74 @@ async def suggest_fix(
 ) -> SuggestFixResponse:
     """Suggest detector improvements for attacks that evaded classification."""
     return build_suggest_fix(body)
+
+
+@app.post("/red-team/assistant-reply", response_model=AssistantReplyResponse)
+async def red_team_assistant_reply(
+    body: AssistantReplyRequest,
+    _: None = Depends(require_red_team_key),
+) -> AssistantReplyResponse:
+    """Proxy assistant chat to Anthropic — keys stay server-side."""
+    try:
+        text = llm_service.assistant_reply(
+            system=body.system,
+            messages=[m.model_dump() for m in body.messages],
+        )
+    except LLMUnavailableError as exc:
+        return AssistantReplyResponse(text=str(exc))
+    return AssistantReplyResponse(text=text)
+
+
+@app.post("/red-team/explain-verdict", response_model=ExplainVerdictResponse)
+async def red_team_explain_verdict(
+    body: ExplainVerdictRequest,
+    _: None = Depends(require_red_team_key),
+) -> ExplainVerdictResponse:
+    """Explain a live detector verdict using Anthropic."""
+    try:
+        text = llm_service.explain_verdict(system=body.system, prompt=body.prompt)
+    except LLMUnavailableError as exc:
+        return ExplainVerdictResponse(text=str(exc))
+    if not text:
+        return ExplainVerdictResponse(text="Model returned no commentary.")
+    return ExplainVerdictResponse(text=text)
+
+
+@app.post("/red-team/mutate-attack", response_model=MutateAttackResponse)
+async def red_team_mutate_attack(
+    body: MutateAttackRequest,
+    _: None = Depends(require_red_team_key),
+) -> MutateAttackResponse:
+    """Generate one mutated adversarial prompt variant."""
+    try:
+        text = llm_service.mutate_attack(base_attack=body.base_attack)
+    except LLMUnavailableError:
+        return MutateAttackResponse(text=body.base_attack)
+    return MutateAttackResponse(text=text or body.base_attack)
+
+
+@app.post("/red-team/generate-attacks", response_model=GenerateAttacksResponse)
+async def red_team_generate_attacks(
+    body: GenerateAttacksRequest,
+    _: None = Depends(require_red_team_key),
+) -> GenerateAttacksResponse:
+    """Generate adversarial prompt variants for batch testing."""
+    try:
+        attacks, error = llm_service.generate_attack_variants(
+            threat_category=body.threat_category,
+            strategy=body.strategy,
+            count=body.count,
+        )
+    except LLMUnavailableError as exc:
+        return GenerateAttacksResponse(attacks=[], error=str(exc))
+    return GenerateAttacksResponse(attacks=attacks, error=error)
+
+
+@app.get("/red-team/llm-health", response_model=LLMHealthResponse)
+async def red_team_llm_health(_: None = Depends(require_red_team_key)) -> LLMHealthResponse:
+    """Verify server-side Anthropic configuration."""
+    ok, message = llm_service.test_api_key()
+    return LLMHealthResponse(ok=ok, message=message)
 
 
 @app.get("/logs")
